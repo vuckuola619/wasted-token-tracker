@@ -97,3 +97,35 @@ export async function getActiveProviders() {
   }
   return active;
 }
+
+/**
+ * Get filesystem paths to watch for real-time session updates.
+ * Each provider can expose its session directories for fs.watch().
+ */
+export async function getProviderWatchPaths() {
+  const results = [];
+  for (const provider of providers) {
+    try {
+      const sessions = await provider.discoverSessions();
+      if (sessions.length > 0) {
+        // Collect unique parent directories from session paths
+        const dirs = new Set();
+        for (const session of sessions) {
+          if (session.path) {
+            // Watch the parent directory of each session
+            const { dirname } = await import('path');
+            const dir = dirname(session.path);
+            dirs.add(dir);
+          }
+        }
+        if (dirs.size > 0) {
+          results.push({
+            provider: provider.name,
+            paths: [...dirs].slice(0, 5), // Limit to 5 dirs per provider
+          });
+        }
+      }
+    } catch {}
+  }
+  return results;
+}

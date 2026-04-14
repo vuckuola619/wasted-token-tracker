@@ -1,49 +1,128 @@
 /**
- * AG-Code Token — Universal AI Token Monitor Server
+ * AG-Code Token — Universal AI Token Monitor Server (v1.2.0)
  * 
- * Zero-dependency HTTP server serving:
+ * Zero-dependency HTTP server with real-time file watching and
+ * ISO 27001 / GDPR / SOC 2 security hardening.
+ * 
+ * Endpoints:
  *   - GET /                → Dashboard (web UI)
  *   - GET /api/summary     → Aggregate summary for a period
  *   - GET /api/providers   → Active providers on this machine
  *   - GET /api/projects    → Per-project breakdown
- *   - GET /api/health      → Health check
+ *   - GET /api/export      → CSV/JSON export
+ *   - GET /api/tips        → Token saving recommendations
+ *   - GET /api/events      → Server-Sent Events (real-time)
+ *   - GET /api/health      → Health check (with watcher status)
+ *   - DELETE /api/cache    → Purge all cached data (GDPR erasure)
  * 
  * No npm install needed — uses only Node.js built-ins.
  */
 
 import http from 'http';
 import { readFile } from 'fs/promises';
-import { join, dirname } from 'path';
+import { join, dirname, extname, resolve, normalize } from 'path';
 import { fileURLToPath } from 'url';
 import { loadPricing } from './models.js';
-import { getAggregateSummary, parseAllSessions, getDateRange } from './parser.js';
-import { getActiveProviders, getProviderNames } from './providers/index.js';
+import { getAggregateSummary, parseAllSessions, getDateRange, invalidateCache } from './parser.js';
+import { getActiveProviders, getProviderNames, getProviderWatchPaths } from './providers/index.js';
+import { FileWatcher, SSEManager } from './watcher.js';
+import {
+  applySecurityHeaders, checkRateLimit, validateQueryParams,
+  ValidationError, isPathSafe, csvSafe, auditLog,
+  initSecurity, shutdownSecurity, canAcceptSSE, incrementSSE,
+  decrementSSE, getSSECount, isURLLengthValid, validateTokenCounts,
+} from './security.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3777;
+const VERSION = '1.2.0';
 
 // ─── MIME Types ────────────────────────────────────────────────────────────────
 const MIME = {
-  '.html': 'text/html',
-  '.css': 'text/css',
-  '.js': 'application/javascript',
-  '.json': 'application/json',
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
 };
+
+// ─── Real-Time Monitoring ──────────────────────────────────────────────────────
+const fileWatcher = new FileWatcher();
+const sseManager = new SSEManager();
+let serverStartTime = Date.now();
 
 // ─── API Routes ────────────────────────────────────────────────────────────────
 async function handleAPI(req, res) {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const path = url.pathname;
 
-  res.setHeader('Content-Type', 'application/json');
+  // URL length check
+  if (!isURLLengthValid(req.url)) {
+    res.statusCode = 414;
+    return json(res, { error: 'URL too long' });
+  }
+
+  // Rate limiting
+  const rateCheck = checkRateLimit(req);
+  res.setHeader('X-RateLimit-Remaining', rateCheck.remaining);
+  if (!rateCheck.allowed) {
+    res.statusCode = 429;
+    res.setHeader('Retry-After', Math.ceil(rateCheck.resetMs / 1000));
+    auditLog('rate_limited', { path });
+    return json(res, { error: 'Too many requests. Try again later.' });
+  }
+
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Access-Control-Allow-Origin', '*');
 
   try {
+    // ─── Health Check ──────────────────────────────────────────────────
     if (path === '/api/health') {
-      return json(res, { status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() });
+      return json(res, {
+        status: 'ok',
+        version: VERSION,
+        timestamp: new Date().toISOString(),
+        uptime: Math.round((Date.now() - serverStartTime) / 1000),
+        watchers: fileWatcher.getStats(),
+        sseClients: sseManager.getClientCount(),
+      });
+    }
+
+    // ─── SSE Stream (Real-Time Events) ─────────────────────────────────
+    if (path === '/api/events') {
+      if (!canAcceptSSE()) {
+        res.statusCode = 503;
+        return json(res, { error: 'Too many streaming connections' });
+      }
+      incrementSSE();
+      const count = sseManager.addClient(res);
+      auditLog('sse_connect', { clients: count });
+      res.on('close', () => {
+        decrementSSE();
+        auditLog('sse_disconnect', { clients: sseManager.getClientCount() });
+      });
+      return; // Keep connection open
+    }
+
+    // ─── GDPR Right to Erasure ─────────────────────────────────────────
+    if (path === '/api/cache' && req.method === 'DELETE') {
+      invalidateCache();
+      auditLog('cache_purged', { reason: 'user_request' });
+      return json(res, { status: 'ok', message: 'All cached data purged' });
+    }
+
+    // Validate query params for data endpoints
+    let params;
+    try {
+      params = validateQueryParams(url);
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        res.statusCode = 400;
+        return json(res, { error: err.message });
+      }
+      throw err;
     }
 
     if (path === '/api/providers') {
@@ -53,17 +132,13 @@ async function handleAPI(req, res) {
     }
 
     if (path === '/api/summary') {
-      const period = url.searchParams.get('period') || 'week';
-      const provider = url.searchParams.get('provider') || 'all';
-      const summary = await getAggregateSummary(period, provider);
+      const summary = await getAggregateSummary(params.period, params.provider);
       return json(res, summary);
     }
 
     if (path === '/api/projects') {
-      const period = url.searchParams.get('period') || 'week';
-      const provider = url.searchParams.get('provider') || 'all';
-      const { range } = getDateRange(period);
-      const projects = await parseAllSessions(range, provider);
+      const { range } = getDateRange(params.period);
+      const projects = await parseAllSessions(range, params.provider);
       return json(res, projects.map(p => ({
         project: p.project,
         provider: p.provider,
@@ -80,22 +155,18 @@ async function handleAPI(req, res) {
     }
 
     if (path === '/api/multi-period') {
-      const provider = url.searchParams.get('provider') || 'all';
       const periods = ['today', 'week', '30days', 'month'];
       const results = {};
       for (const period of periods) {
-        results[period] = await getAggregateSummary(period, provider);
+        results[period] = await getAggregateSummary(period, params.provider);
       }
       return json(res, results);
     }
 
-    // ─── Export API (CSV + JSON) ─────────────────────────────────────────
+    // ─── Export API (CSV + JSON) with CSV injection protection ────────
     if (path === '/api/export') {
-      const period = url.searchParams.get('period') || 'week';
-      const provider = url.searchParams.get('provider') || 'all';
-      const fmt = url.searchParams.get('format') || 'json';
-      const { range } = getDateRange(period);
-      const projectsRaw = await parseAllSessions(range, provider);
+      const { range } = getDateRange(params.period);
+      const projectsRaw = await parseAllSessions(range, params.provider);
       const rows = projectsRaw.map(p => ({
         project: p.project,
         provider: p.provider,
@@ -108,17 +179,19 @@ async function handleAPI(req, res) {
         cacheWriteTokens: p.totalCacheWriteTokens,
         reasoningTokens: p.totalReasoningTokens,
       }));
-      if (fmt === 'csv') {
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename="ag-code-token-${period}.csv"`);
-        const head = Object.keys(rows[0] || {}).join(',');
-        const body = rows.map(r => Object.values(r).join(',')).join('\n');
+      if (params.format === 'csv') {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="ag-code-token-${params.period}.csv"`);
+        const head = Object.keys(rows[0] || {}).map(csvSafe).join(',');
+        const body = rows.map(r => Object.values(r).map(csvSafe).join(',')).join('\n');
+        auditLog('data_export', { format: 'csv', period: params.period, rows: rows.length });
         return res.end(head + '\n' + body);
       }
-      return json(res, { period, rows });
+      auditLog('data_export', { format: 'json', period: params.period, rows: rows.length });
+      return json(res, { period: params.period, rows });
     }
 
-    // ─── Token Saving Tips API ───────────────────────────────────────────
+    // ─── Token Saving Tips API ───────────────────────────────────────
     if (path === '/api/tips') {
       const summary = await getAggregateSummary('week', 'all');
       const tips = generateTokenSavingTips(summary);
@@ -128,14 +201,17 @@ async function handleAPI(req, res) {
     res.statusCode = 404;
     return json(res, { error: 'Not found' });
   } catch (err) {
-    console.error('[API Error]', err);
+    auditLog('api_error', { path, error: err.message, level: 'error' });
     res.statusCode = 500;
-    return json(res, { error: err.message });
+    // Don't leak internal error details in production
+    return json(res, { error: 'Internal server error' });
   }
 }
 
 function json(res, data) {
-  res.end(JSON.stringify(data));
+  if (!res.writableEnded) {
+    res.end(JSON.stringify(data));
+  }
 }
 
 // ─── Token Saving Advisor Engine ───────────────────────────────────────────────
@@ -235,11 +311,30 @@ function generateTokenSavingTips(summary) {
   return tips;
 }
 
-// ─── Static File Serving ───────────────────────────────────────────────────────
+// ─── Static File Serving (with path traversal protection) ──────────────────────
 async function serveStatic(req, res) {
-  let filePath = req.url === '/' ? '/index.html' : req.url;
-  const fullPath = join(__dirname, 'public', filePath);
-  const ext = filePath.substring(filePath.lastIndexOf('.'));
+  let filePath = req.url === '/' ? '/index.html' : req.url.split('?')[0]; // Strip query string
+
+  // Security: path traversal protection
+  if (!isPathSafe(filePath)) {
+    auditLog('path_traversal_blocked', { path: filePath, level: 'warn' });
+    res.statusCode = 403;
+    res.setHeader('Content-Type', 'text/plain');
+    return res.end('Forbidden');
+  }
+
+  const publicDir = join(__dirname, 'public');
+  const fullPath = normalize(join(publicDir, filePath));
+
+  // Ensure resolved path is within public directory (belt-and-suspenders)
+  if (!fullPath.startsWith(normalize(publicDir))) {
+    auditLog('path_escape_blocked', { path: filePath, level: 'warn' });
+    res.statusCode = 403;
+    res.setHeader('Content-Type', 'text/plain');
+    return res.end('Forbidden');
+  }
+
+  const ext = extname(filePath);
 
   try {
     const content = await readFile(fullPath);
@@ -254,23 +349,83 @@ async function serveStatic(req, res) {
 
 // ─── Server ────────────────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
+  // Apply security headers to ALL responses
+  applySecurityHeaders(res);
+
+  // Only allow GET and DELETE methods
+  if (req.method !== 'GET' && req.method !== 'DELETE') {
+    res.statusCode = 405;
+    res.setHeader('Allow', 'GET, DELETE');
+    res.setHeader('Content-Type', 'application/json');
+    return res.end(JSON.stringify({ error: 'Method not allowed' }));
+  }
+
   if (req.url.startsWith('/api/')) {
     return handleAPI(req, res);
   }
   return serveStatic(req, res);
 });
 
+// ─── Graceful Shutdown ─────────────────────────────────────────────────────────
+let isShuttingDown = false;
+
+async function gracefulShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  auditLog('shutdown_start', { signal, uptime: Math.round((Date.now() - serverStartTime) / 1000) });
+  console.log(`\n  ⏹  Received ${signal}, shutting down gracefully...`);
+
+  // 1. Stop accepting new connections
+  server.close(() => {
+    auditLog('http_closed');
+  });
+
+  // 2. Close SSE connections
+  sseManager.closeAll();
+
+  // 3. Stop file watchers
+  fileWatcher.stop();
+
+  // 4. Cleanup security module
+  shutdownSecurity();
+
+  auditLog('shutdown_complete');
+  console.log('  ✓  All resources released. Goodbye.\n');
+
+  // Give logs time to flush
+  setTimeout(() => process.exit(0), 200);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('uncaughtException', (err) => {
+  auditLog('uncaught_exception', { message: err.message, stack: err.stack?.slice(0, 500), level: 'error' });
+  console.error('[FATAL]', err);
+  gracefulShutdown('uncaughtException');
+});
+process.on('unhandledRejection', (reason) => {
+  auditLog('unhandled_rejection', { reason: String(reason).slice(0, 500), level: 'error' });
+  console.error('[FATAL] Unhandled rejection:', reason);
+});
+
 // ─── Startup ───────────────────────────────────────────────────────────────────
 async function main() {
-  console.log('\n  ⚡ AG-Code Token — Universal AI Token Monitor');
-  console.log('  ─────────────────────────────────────────────\n');
+  serverStartTime = Date.now();
+
+  console.log('\n  ⚡ AG-Code Token — Universal AI Token Monitor (v' + VERSION + ')');
+  console.log('  ─────────────────────────────────────────────────────\n');
+
+  // Initialize security module
+  initSecurity();
+  auditLog('server_start', { version: VERSION, port: PORT });
 
   // Load model pricing
-  console.log('  [1/3] Loading LLM pricing data...');
+  console.log('  [1/4] Loading LLM pricing data...');
   await loadPricing();
 
   // Discover providers
-  console.log('  [2/3] Discovering AI coding tools...');
+  console.log('  [2/4] Discovering AI coding tools...');
   const active = await getActiveProviders();
   if (active.length === 0) {
     console.log('  ⚠  No AI coding tools detected on this machine.');
@@ -281,16 +436,46 @@ async function main() {
     }
   }
 
+  // Start file watchers
+  console.log('\n  [3/4] Starting real-time file watchers...');
+  try {
+    const watchPaths = await getProviderWatchPaths();
+    for (const { provider, paths } of watchPaths) {
+      for (const watchPath of paths) {
+        fileWatcher.watchDirectory(watchPath, provider);
+      }
+    }
+    const stats = fileWatcher.getStats();
+    console.log(`  ✓  ${stats.active} directories being watched`);
+  } catch (err) {
+    console.log(`  ⚠  File watching unavailable: ${err.message}`);
+    console.log('  Falling back to 60-second polling.');
+  }
+
+  // Wire watcher → SSE broadcast + cache invalidation
+  fileWatcher.on('change', (event) => {
+    invalidateCache();
+    sseManager.broadcast('session-update', {
+      provider: event.provider,
+      type: event.type,
+      timestamp: event.timestamp,
+    });
+  });
+
   // Start server
-  console.log(`\n  [3/3] Starting dashboard server...`);
+  console.log(`\n  [4/4] Starting dashboard server...`);
   server.listen(PORT, () => {
-    console.log(`\n  🔥 Dashboard: http://localhost:${PORT}`);
-    console.log(`  📊 API:       http://localhost:${PORT}/api/summary`);
-    console.log(`  🔌 Providers: http://localhost:${PORT}/api/providers\n`);
+    console.log(`\n  🔥 Dashboard:  http://localhost:${PORT}`);
+    console.log(`  📊 API:        http://localhost:${PORT}/api/summary`);
+    console.log(`  🔌 Providers:  http://localhost:${PORT}/api/providers`);
+    console.log(`  📡 Events:     http://localhost:${PORT}/api/events`);
+    console.log(`  🔒 Security:   Rate limiting (${120}/min), CSP, CORS\n`);
+    auditLog('server_ready', { port: PORT });
   });
 }
 
 main().catch(err => {
+  auditLog('fatal_startup', { error: err.message, level: 'error' });
   console.error('Fatal:', err);
   process.exit(1);
 });

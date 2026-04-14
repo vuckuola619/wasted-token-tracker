@@ -173,6 +173,31 @@
       letter-spacing: -0.3px;
     }
 
+    .live-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      transition: background var(--t-base);
+    }
+
+    .live-indicator.connected { background: var(--green-3); color: var(--green-11); }
+    .live-indicator.connected .live-dot { background: var(--green-9); box-shadow: 0 0 6px var(--green-9); animation: pulse 2s infinite; }
+    .live-indicator.disconnected { background: var(--red-3); color: var(--red-11); }
+    .live-indicator.disconnected .live-dot { background: var(--red-9); }
+
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
     .header-controls {
       display: flex;
       align-items: center;
@@ -826,6 +851,10 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
       </div>
       <span class="logo-text">AG-Code Token</span>
+      <span class="live-indicator disconnected" id="liveIndicator" title="Connection status">
+        <span class="live-dot"></span>
+        <span id="liveLabel">Connecting</span>
+      </span>
     </div>
     <div class="header-controls">
       <div class="period-group" role="tablist" aria-label="Time period">
@@ -1200,6 +1229,60 @@
       window.open(`/api/export?period=${currentPeriod}&provider=${currentProvider}&format=csv`, '_blank');
     });
 
+    // ─── Real-Time SSE Connection ─────────────────────────────────────────
+    let eventSource = null;
+    let sseReconnectTimer = null;
+
+    function updateLiveIndicator(connected) {
+      const el = document.getElementById('liveIndicator');
+      const label = document.getElementById('liveLabel');
+      if (connected) {
+        el.className = 'live-indicator connected';
+        label.textContent = 'Live';
+      } else {
+        el.className = 'live-indicator disconnected';
+        label.textContent = 'Offline';
+      }
+    }
+
+    function connectSSE() {
+      if (eventSource) {
+        try { eventSource.close(); } catch {}
+      }
+      try {
+        eventSource = new EventSource('/api/events');
+
+        eventSource.addEventListener('connected', () => {
+          updateLiveIndicator(true);
+        });
+
+        eventSource.addEventListener('session-update', (e) => {
+          // Real-time update: reload data when files change
+          loadSummary();
+          fetchJSON('/api/tips').then(data => { tipsData = data; }).catch(() => {});
+        });
+
+        eventSource.addEventListener('heartbeat', () => {
+          updateLiveIndicator(true);
+        });
+
+        eventSource.addEventListener('shutdown', () => {
+          updateLiveIndicator(false);
+        });
+
+        eventSource.onerror = () => {
+          updateLiveIndicator(false);
+          eventSource.close();
+          // Reconnect after 5 seconds
+          sseReconnectTimer = setTimeout(connectSSE, 5000);
+        };
+      } catch {
+        updateLiveIndicator(false);
+        // Fallback to polling if EventSource unavailable
+        setInterval(() => loadSummary(), 60 * 1000);
+      }
+    }
+
     // ─── Init ─────────────────────────────────────────────────────────────
     async function init() {
       try {
@@ -1207,6 +1290,8 @@
         // Load tips in parallel with summary
         fetchJSON('/api/tips').then(data => { tipsData = data; }).catch(() => {});
         await loadSummary();
+        // Start real-time connection
+        connectSSE();
       } catch (err) {
         document.getElementById('app').innerHTML = `
           <div class="empty-state">
@@ -1214,14 +1299,18 @@
             <div class="empty-title">Connection Error</div>
             <div class="empty-desc">Could not connect to the AG-Code Token server. Make sure it's running on port 3777.</div>
           </div>`;
+        updateLiveIndicator(false);
       }
     }
 
     init();
 
-    // Auto-refresh every 5 minutes
-    setInterval(() => loadSummary(), 5 * 60 * 1000);
+    // Fallback: poll every 5 min in case SSE drops silently
+    setInterval(() => {
+      if (!eventSource || eventSource.readyState === EventSource.CLOSED) {
+        loadSummary();
+      }
+    }, 5 * 60 * 1000);
   </script>
 </body>
 </html>
-

@@ -9,6 +9,7 @@
 
 import { discoverAllSessions, getProvider } from './providers/index.js';
 import { getShortModelName } from './models.js';
+import { validateTokenCounts, validateTimestamp, auditLog } from './security.js';
 
 // ─── Caching ───────────────────────────────────────────────────────────────────
 const CACHE_TTL_MS = 60_000; // 60 seconds
@@ -17,6 +18,15 @@ const sessionCache = new Map();
 function cacheKey(dateRange, providerFilter) {
   const s = dateRange ? `${dateRange.start.getTime()}:${dateRange.end.getTime()}` : 'none';
   return `${s}:${providerFilter ?? 'all'}`;
+}
+
+/**
+ * Invalidate all cached session data.
+ * Called by FileWatcher on session file changes for real-time updates.
+ * Also callable via DELETE /api/cache for GDPR right-to-erasure.
+ */
+export function invalidateCache() {
+  sessionCache.clear();
 }
 
 // ─── Date Range Helpers ────────────────────────────────────────────────────────
@@ -96,9 +106,14 @@ export async function parseAllSessions(dateRange, providerFilter) {
       for await (const call of parser.parse()) {
         // Date filter
         if (dateRange && call.timestamp) {
-          const ts = new Date(call.timestamp);
+          const validTs = validateTimestamp(call.timestamp);
+          if (!validTs) continue; // Skip entries with invalid timestamps
+          const ts = new Date(validTs);
           if (ts < dateRange.start || ts > dateRange.end) continue;
         }
+
+        // Data integrity gate (SOC 2 CC8.1)
+        validateTokenCounts(call);
 
         // Aggregate into project
         const projectKey = `${providerName}:${source.project}`;
