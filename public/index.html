@@ -660,6 +660,111 @@
       margin: 0 auto;
     }
 
+    /* ─── Token Saving Tips Panel ──────────────────────────────────────── */
+    .tips-panel {
+      margin-bottom: var(--s8);
+    }
+
+    .tip-item {
+      display: flex;
+      gap: var(--s4);
+      padding: var(--s4) var(--s5);
+      background: var(--bg-element);
+      border-radius: var(--r-md);
+      margin-bottom: var(--s3);
+      border-left: 3px solid;
+      transition: background var(--t-fast) var(--ease-out);
+    }
+
+    .tip-item:hover { background: var(--bg-hover); }
+
+    .tip-item.sev-high { border-left-color: var(--red-9); }
+    .tip-item.sev-medium { border-left-color: var(--amber-9); }
+    .tip-item.sev-low { border-left-color: var(--blue-9); }
+    .tip-item.sev-info { border-left-color: var(--slate-7); }
+
+    .tip-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--r-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .tip-item.sev-high .tip-icon { background: var(--red-3); color: var(--red-11); }
+    .tip-item.sev-medium .tip-icon { background: var(--amber-3); color: var(--amber-11); }
+    .tip-item.sev-low .tip-icon { background: var(--blue-3); color: var(--blue-11); }
+    .tip-item.sev-info .tip-icon { background: var(--slate-4); color: var(--slate-11); }
+
+    .tip-content { flex: 1; min-width: 0; }
+
+    .tip-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-max);
+      margin-bottom: 2px;
+    }
+
+    .tip-desc {
+      font-size: 12px;
+      color: var(--text-med);
+      line-height: 1.5;
+    }
+
+    .tip-savings {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: var(--s2);
+      padding: 2px 8px;
+      border-radius: 100px;
+      font-size: 10px;
+      font-weight: 700;
+      background: var(--green-3);
+      color: var(--green-11);
+    }
+
+    .tip-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: var(--s2);
+      margin-left: var(--s2);
+      font-size: 11px;
+      color: var(--accent-text);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color var(--t-fast);
+    }
+
+    .tip-link:hover { color: var(--accent-solid); }
+
+    /* ─── Export Button ─────────────────────────────────────────────────── */
+    .btn-export {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--s2);
+      padding: var(--s2) var(--s3);
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-element);
+      color: var(--text-med);
+      border-radius: var(--r-sm);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--t-fast) var(--ease-out);
+    }
+
+    .btn-export:hover {
+      border-color: var(--border-hover);
+      color: var(--text-max);
+      background: var(--bg-hover);
+    }
+
     /* ─── Footer ───────────────────────────────────────────────────────── */
     .footer {
       text-align: center;
@@ -733,6 +838,10 @@
       <select class="provider-select" id="providerFilter" aria-label="Filter by provider">
         <option value="all">All Providers</option>
       </select>
+      <button class="btn-export" id="exportBtn" title="Export data as CSV">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        Export
+      </button>
     </div>
   </header>
 
@@ -750,6 +859,7 @@
     let currentProvider = 'all';
     let summaryData = null;
     let providersData = null;
+    let tipsData = null;
 
     // Radix-based provider color tokens
     const PROVIDER_COLORS = {
@@ -797,6 +907,9 @@
       folder: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>',
       search: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>',
       alertTriangle: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>',
+      lightbulb: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path><path d="M9 18h6"></path><path d="M10 22h4"></path></svg>',
+      arrowDown: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="m19 12-7 7-7-7"></path></svg>',
+      externalLink: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>',
     };
 
     // ─── API ──────────────────────────────────────────────────────────────
@@ -1031,14 +1144,37 @@
           </div>` : '<div class="empty-state"><div class="empty-desc">No projects</div></div>'}
         </div>
 
+        <!-- Token Saving Advisor -->
+        ${tipsData?.tips?.length > 0 ? `
+        <div class="card tips-panel">
+          <div class="card-header">
+            <div class="card-icon" style="background:var(--green-3);color:var(--green-11)">${ICONS.lightbulb}</div>
+            <div class="card-title">Token Saving Advisor</div>
+          </div>
+          ${tipsData.tips.map(tip => `
+          <div class="tip-item sev-${tip.severity}">
+            <div class="tip-icon">${tip.severity === 'high' ? ICONS.alertTriangle.replace(/36/g, '14') : tip.severity === 'medium' ? ICONS.lightbulb : ICONS.chart}</div>
+            <div class="tip-content">
+              <div class="tip-title">${tip.title}</div>
+              <div class="tip-desc">${tip.description}</div>
+              <div>
+                ${tip.savings ? `<span class="tip-savings">${ICONS.arrowDown} ${tip.savings}</span>` : ''}
+                ${tip.link ? `<a class="tip-link" href="${tip.link}" target="_blank" rel="noopener">${ICONS.externalLink} Learn more</a>` : ''}
+              </div>
+            </div>
+          </div>
+          `).join('')}
+        </div>` : ''}
+
         <!-- Footer -->
         <footer class="footer">
           <div class="footer-text">
-            AG-Code Token v1.0.0 · Built with
+            AG-Code Token v1.1.0 · Built with
             <a href="https://github.com/vuckuola619/ag-code-token" target="_blank" rel="noopener">open source</a>
+            · <a href="/api/export?period=${currentPeriod}&provider=${currentProvider}&format=csv" download>Export CSV</a>
           </div>
         </footer>
-      `;
+       `;
     }
 
     // ─── Event Listeners ──────────────────────────────────────────────────
@@ -1060,10 +1196,16 @@
       loadSummary();
     });
 
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      window.open(`/api/export?period=${currentPeriod}&provider=${currentProvider}&format=csv`, '_blank');
+    });
+
     // ─── Init ─────────────────────────────────────────────────────────────
     async function init() {
       try {
         await loadProviders();
+        // Load tips in parallel with summary
+        fetchJSON('/api/tips').then(data => { tipsData = data; }).catch(() => {});
         await loadSummary();
       } catch (err) {
         document.getElementById('app').innerHTML = `
@@ -1082,3 +1224,4 @@
   </script>
 </body>
 </html>
+

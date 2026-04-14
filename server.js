@@ -89,6 +89,42 @@ async function handleAPI(req, res) {
       return json(res, results);
     }
 
+    // ─── Export API (CSV + JSON) ─────────────────────────────────────────
+    if (path === '/api/export') {
+      const period = url.searchParams.get('period') || 'week';
+      const provider = url.searchParams.get('provider') || 'all';
+      const fmt = url.searchParams.get('format') || 'json';
+      const { range } = getDateRange(period);
+      const projectsRaw = await parseAllSessions(range, provider);
+      const rows = projectsRaw.map(p => ({
+        project: p.project,
+        provider: p.provider,
+        providerDisplayName: p.providerDisplayName,
+        costUSD: p.totalCostUSD,
+        apiCalls: p.totalApiCalls,
+        inputTokens: p.totalInputTokens,
+        outputTokens: p.totalOutputTokens,
+        cacheReadTokens: p.totalCacheReadTokens,
+        cacheWriteTokens: p.totalCacheWriteTokens,
+        reasoningTokens: p.totalReasoningTokens,
+      }));
+      if (fmt === 'csv') {
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="ag-code-token-${period}.csv"`);
+        const head = Object.keys(rows[0] || {}).join(',');
+        const body = rows.map(r => Object.values(r).join(',')).join('\n');
+        return res.end(head + '\n' + body);
+      }
+      return json(res, { period, rows });
+    }
+
+    // ─── Token Saving Tips API ───────────────────────────────────────────
+    if (path === '/api/tips') {
+      const summary = await getAggregateSummary('week', 'all');
+      const tips = generateTokenSavingTips(summary);
+      return json(res, { tips });
+    }
+
     res.statusCode = 404;
     return json(res, { error: 'Not found' });
   } catch (err) {
@@ -100,6 +136,103 @@ async function handleAPI(req, res) {
 
 function json(res, data) {
   res.end(JSON.stringify(data));
+}
+
+// ─── Token Saving Advisor Engine ───────────────────────────────────────────────
+function generateTokenSavingTips(summary) {
+  const tips = [];
+  const { totalInputTokens = 0, totalOutputTokens = 0, totalCacheReadTokens = 0,
+          totalCacheWriteTokens = 0, totalCostUSD = 0, totalApiCalls = 0 } = summary;
+  const total = totalInputTokens + totalOutputTokens;
+
+  // RTK tip: if high token usage, recommend RTK
+  if (total > 500_000) {
+    tips.push({
+      id: 'rtk-proxy',
+      severity: 'high',
+      title: 'Reduce tokens by 60-90% with RTK',
+      description: 'RTK (github.com/rtk-ai/rtk) is a CLI proxy that compresses command outputs before they reach your LLM context. Run `rtk init -g` to auto-hook your shell commands.',
+      savings: '60-90% on bash/terminal output tokens',
+      link: 'https://github.com/rtk-ai/rtk',
+    });
+  }
+
+  // Cache efficiency
+  const cacheTotal = totalCacheReadTokens + totalCacheWriteTokens;
+  if (cacheTotal === 0 && total > 100_000) {
+    tips.push({
+      id: 'enable-caching',
+      severity: 'high',
+      title: 'Enable prompt caching',
+      description: 'Your sessions have 0 cached tokens. Enabling prompt caching can reduce input costs by up to 90%. Set system prompts and project context as cacheable prefixes.',
+      savings: 'Up to 90% on repeated input tokens',
+    });
+  } else if (cacheTotal > 0) {
+    const hitRate = totalCacheReadTokens / Math.max(cacheTotal, 1) * 100;
+    if (hitRate < 50) {
+      tips.push({
+        id: 'improve-cache-hits',
+        severity: 'medium',
+        title: `Cache hit rate is only ${hitRate.toFixed(0)}%`,
+        description: 'Too many cache writes vs reads. Keep session context stable to maximize cache hits. Avoid changing system prompts mid-conversation.',
+        savings: `Could save ~${((cacheTotal * 0.5) / 1000).toFixed(0)}K tokens with better caching`,
+      });
+    }
+  }
+
+  // Karpathy Wiki pattern
+  if (totalApiCalls > 3 && totalInputTokens > 1_000_000) {
+    tips.push({
+      id: 'llm-wiki',
+      severity: 'medium',
+      title: 'Use a persistent context file (LLM-Wiki pattern)',
+      description: 'You\'re feeding 1M+ input tokens per week. Create a CLAUDE.md or AGENTS.md with project context so the LLM doesn\'t re-discover your codebase each session. (Karpathy\'s LLM-Wiki pattern)',
+      savings: 'Reduce per-session bootstrap tokens by 30-50%',
+      link: 'https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f',
+    });
+  }
+
+  // Model selection
+  if (summary.models?.length > 0) {
+    const expensiveModels = summary.models.filter(m =>
+      m.name.includes('Opus') || m.name.includes('GPT-5') || m.name.includes('o3')
+    );
+    if (expensiveModels.length > 0 && totalCostUSD > 50) {
+      const expCost = expensiveModels.reduce((s, m) => s + m.costUSD, 0);
+      tips.push({
+        id: 'model-tiering',
+        severity: 'medium',
+        title: `$${expCost.toFixed(0)} spent on premium models this week`,
+        description: 'Consider using Sonnet/Haiku/Flash for simpler tasks (reading, searching, scaffolding). Reserve Opus/GPT-5/o3 for complex reasoning only.',
+        savings: `Potential 40-70% cost reduction (~$${(expCost * 0.5).toFixed(0)} savings)`,
+      });
+    }
+  }
+
+  // Cost per call
+  if (totalApiCalls > 0) {
+    const costPerCall = totalCostUSD / totalApiCalls;
+    if (costPerCall > 5) {
+      tips.push({
+        id: 'break-up-sessions',
+        severity: 'low',
+        title: `Avg $${costPerCall.toFixed(2)} per API call`,
+        description: 'Very long sessions accumulate large context windows. Break complex tasks into smaller sub-tasks to reduce per-call token counts.',
+        savings: 'Smaller context = faster responses + lower cost',
+      });
+    }
+  }
+
+  // Tool config
+  tips.push({
+    id: 'config-tuning',
+    severity: 'info',
+    title: 'Config tuning checklist',
+    description: 'Set .cursorrules / .clinerules to limit file exploration scope. Use .gitignore-aware tools. Disable auto-indexing of node_modules and dist folders.',
+    savings: 'Prevents unnecessary file reads (10-30% input savings)',
+  });
+
+  return tips;
 }
 
 // ─── Static File Serving ───────────────────────────────────────────────────────
