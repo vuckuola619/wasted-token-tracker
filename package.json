@@ -1,0 +1,40 @@
+{
+  "name": "ag-code-token",
+  "version": "1.0.0",
+  "description": "Universal AI coding token usage monitor — track costs across Claude Code, Codex, Cursor, Windsurf, Cline, Copilot, Continue.dev, Aider, and Antigravity from a single dashboard",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "ai-coding",
+    "token-usage",
+    "cost-tracking",
+    "claude-code",
+    "codex",
+    "cursor",
+    "windsurf",
+    "cline",
+    "copilot",
+    "aider",
+    "antigravity",
+    "observability",
+    "llm",
+    "dashboard"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vuckuola619/ag-code-token.git"
+  },
+  "homepage": "https://github.com/vuckuola619/ag-code-token#readme",
+  "bugs": {
+    "url": "https://github.com/vuckuola619/ag-code-token/issues"
+  },
+  "author": "vuckuola619",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
