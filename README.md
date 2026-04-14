@@ -78,6 +78,23 @@ Every AI tool is a provider plugin. Each file in `providers/` implements a stand
 - **Token Breakdown:** Input, output, cache read/write, reasoning tokens
 - **Tool Usage:** Which agent tools (Read, Edit, Bash, Search) get called most
 - **Project Table:** Per-project cost and usage with provider badges
+- **Token Saving Advisor:** Smart recommendations to reduce token consumption
+
+### 💡 Token Saving Advisor
+Built-in intelligence that analyzes your usage and suggests actionable optimizations:
+- **[RTK](https://github.com/rtk-ai/rtk) integration** — Recommends the CLI proxy that cuts tokens 60-90%
+- **Prompt caching detection** — Flags sessions with 0% cache hits
+- **[LLM-Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)** — Karpathy’s persistent context strategy
+- **Model tiering** — Detects expensive model usage, suggests cheaper alternatives
+- **Cost-per-call alerts** — Warns about oversized context windows
+- **Config tuning** — `.cursorrules`, `.clinerules`, `.gitignore` optimizations
+
+### 📤 CSV/JSON Export
+Export your usage data via the dashboard button or API:
+```bash
+curl http://localhost:3777/api/export?period=week&format=csv
+curl http://localhost:3777/api/export?period=month&format=json
+```
 
 ### 🏠 Fully Local & Private
 All data stays on your machine. AG-Code Token reads session files from disk — it never phones home, never touches your API keys, never sends telemetry.
@@ -88,7 +105,6 @@ No `npm install`. No `node_modules`. The entire server runs on Node.js built-in 
 ### 🔄 Auto-Refresh & Caching
 Dashboard auto-refreshes every 5 minutes. Server-side parsing results are cached for 60 seconds to keep the UI snappy even with hundreds of session files.
 
----
 
 ## Supported IDEs
 
@@ -167,6 +183,12 @@ Per-project breakdown with model and tool details.
 
 ### `GET /api/multi-period`
 Summary across all periods in a single call (`today`, `week`, `30days`, `month`).
+
+### `GET /api/export?period=week&format=csv`
+Export data as CSV or JSON. Supports all periods and provider filters.
+
+### `GET /api/tips`
+Returns smart token-saving recommendations based on your current usage patterns.
 
 ---
 
@@ -322,6 +344,9 @@ Very. For tools that log per-token usage (Claude Code, Codex, Cline), costs are 
 
 ## Roadmap
 
+- [x] 📤 Export to CSV/JSON
+- [x] 💡 Token saving recommendations (RTK, Karpathy LLM-Wiki)
+- [x] 🎨 Radix Colors design system (dark mode, WCAG AA)
 - [ ] 📈 Historical cost charts (daily/weekly trends)
 - [ ] 🔔 Budget alerts and notifications
 - [ ] 📦 npm package for programmatic usage
@@ -329,7 +354,7 @@ Very. For tools that log per-token usage (Claude Code, Codex, Cline), costs are 
 - [ ] 🖥️ System tray app (Electron/Tauri)
 - [ ] 📱 Mobile-friendly responsive redesign
 - [ ] 🔗 Webhook integration (Slack, Discord)
-- [ ] 📊 Export to CSV/JSON
+- [ ] 💱 Multi-currency support
 
 ---
 
