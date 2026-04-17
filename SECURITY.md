@@ -52,7 +52,7 @@ All responses include:
 If you discover a security vulnerability, please report it responsibly:
 
 1. **DO NOT** open a public GitHub issue
-2. Email: [Create a private security advisory](https://github.com/vuckuola619/ag-code-token/security/advisories/new)
+2. Email: [Create a private security advisory](https://github.com/vuckuola619/wasted-token-tracker/security/advisories/new)
 3. Include: description, reproduction steps, and impact assessment
 4. Expected response: within 48 hours
 

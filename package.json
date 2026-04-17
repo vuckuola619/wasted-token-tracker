@@ -29,11 +29,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/vuckuola619/ag-code-token.git"
+    "url": "git+https://github.com/vuckuola619/wasted-token-tracker.git"
   },
-  "homepage": "https://github.com/vuckuola619/ag-code-token#readme",
+  "homepage": "https://github.com/vuckuola619/wasted-token-tracker#readme",
   "bugs": {
-    "url": "https://github.com/vuckuola619/ag-code-token/issues"
+    "url": "https://github.com/vuckuola619/wasted-token-tracker/issues"
   },
   "author": "vuckuola619",
   "license": "MIT",

@@ -42,8 +42,8 @@ You use AI coding tools daily — Claude Code, Codex, Cursor, perhaps Copilot. E
 ## Quick Start
 
 ```bash
-git clone https://github.com/vuckuola619/ag-code-token.git
-cd ag-code-token
+git clone https://github.com/vuckuola619/wasted-token-tracker.git
+cd wasted-token-tracker
 node server.js
 ```
 
