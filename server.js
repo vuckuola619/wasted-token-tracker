@@ -25,6 +25,7 @@ import { fileURLToPath } from 'url';
 import { loadPricing } from './models.js';
 import { getAggregateSummary, parseAllSessions, getDateRange, invalidateCache } from './parser.js';
 import { getActiveProviders, getProviderNames, getProviderWatchPaths } from './providers/index.js';
+import { getModelHintsPath, saveModelHints, invalidateModelHintsCache } from './providers/antigravity.js';
 import { FileWatcher, SSEManager } from './watcher.js';
 import {
   applySecurityHeaders, checkRateLimit, validateQueryParams,
@@ -215,6 +216,50 @@ async function handleAPI(req, res) {
       return json(res, { tips });
     }
 
+    // ─── Model Hints Config API ─────────────────────────────────────
+    if (path === '/api/model-hints') {
+      if (req.method === 'GET') {
+        const { readFile: rf } = await import('fs/promises');
+        const hintsPath = getModelHintsPath();
+        try {
+          const raw = await rf(hintsPath, 'utf-8');
+          return json(res, {
+            hints: JSON.parse(raw),
+            path: hintsPath,
+            availableModels: [
+              { id: 'claude-opus-4-6', name: 'Claude Opus 4.6 (Thinking)' },
+              { id: 'claude-opus-4-5', name: 'Claude Opus 4.5' },
+              { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6 (Thinking)' },
+              { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' },
+              { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro' },
+              { id: 'gemini-3-flash', name: 'Gemini 3 Flash' },
+              { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
+              { id: 'gpt-oss-120b', name: 'GPT-OSS 120B' },
+            ],
+          });
+        } catch {
+          return json(res, {
+            hints: { defaultModel: 'gemini-3.1-pro', conversations: {} },
+            path: hintsPath,
+            note: 'No config file found. Using defaults.',
+          });
+        }
+      }
+      if (req.method === 'PUT' || req.method === 'POST') {
+        const body = await readRequestBody(req);
+        const hints = JSON.parse(body);
+        // Validate structure
+        if (!hints.defaultModel || typeof hints.defaultModel !== 'string') {
+          res.statusCode = 400;
+          return json(res, { error: 'defaultModel is required and must be a string' });
+        }
+        await saveModelHints(hints);
+        invalidateCache(); // Force re-parse with new model hints
+        auditLog('model_hints_updated', { defaultModel: hints.defaultModel });
+        return json(res, { status: 'ok', hints });
+      }
+    }
+
     res.statusCode = 404;
     return json(res, { error: 'Not found' });
   } catch (err) {
@@ -229,6 +274,24 @@ function json(res, data) {
   if (!res.writableEnded) {
     res.end(JSON.stringify(data));
   }
+}
+
+/** Read request body with size limit (64KB). */
+function readRequestBody(req, maxBytes = 65536) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        req.destroy();
+        reject(new Error('Request body too large'));
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+    req.on('error', reject);
+  });
 }
 
 // ─── Token Saving Advisor Engine ───────────────────────────────────────────────
@@ -369,12 +432,20 @@ const server = http.createServer(async (req, res) => {
   // Apply security headers to ALL responses
   applySecurityHeaders(res);
 
-  // Only allow GET and DELETE methods
-  if (req.method !== 'GET' && req.method !== 'DELETE') {
+  // Only allow specific methods
+  const allowedMethods = ['GET', 'DELETE', 'PUT', 'POST', 'OPTIONS'];
+  if (!allowedMethods.includes(req.method)) {
     res.statusCode = 405;
-    res.setHeader('Allow', 'GET, DELETE');
+    res.setHeader('Allow', allowedMethods.join(', '));
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify({ error: 'Method not allowed' }));
+  }
+  // CORS preflight
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', allowedMethods.join(', '));
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.statusCode = 204;
+    return res.end();
   }
 
   if (req.url.startsWith('/api/')) {

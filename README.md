@@ -1,124 +1,144 @@
 <p align="center">
-  <img src="public/screenshot.png" alt="AG-Code Token Dashboard" width="800" />
+  <img src="public/screenshot.png" alt="AG-Code Token — Universal AI Token Monitor" width="820" />
 </p>
 
-<h1 align="center">🔥 AG-Code Token</h1>
+<h1 align="center">AG-Code Token</h1>
 
 <p align="center">
-  <strong>Universal AI Token Monitor for Every Coding IDE</strong>
-</p>
-
-<p align="center">
-  See where your AI coding tokens go.<br/>
-  Track costs across <strong>Claude Code</strong>, <strong>Codex</strong>, <strong>Cursor</strong>, <strong>Windsurf</strong>, <strong>Cline</strong>, <strong>Copilot</strong>, <strong>Continue.dev</strong>, <strong>Aider</strong>, and <strong>Antigravity</strong> — from a single dashboard.
+  <strong>Universal AI token usage monitor for every coding IDE and agent.</strong>
 </p>
 
 <p align="center">
-  <a href="#quick-start"><img src="https://img.shields.io/badge/get_started-30s_setup-blue?style=for-the-badge" alt="Get Started" /></a>
-  <a href="#supported-ides"><img src="https://img.shields.io/badge/IDEs-9_supported-green?style=for-the-badge" alt="9 IDEs" /></a>
-  <a href="#supported-models"><img src="https://img.shields.io/badge/models-50+-purple?style=for-the-badge" alt="50+ Models" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-orange?style=for-the-badge" alt="MIT License" /></a>
+  Track costs across Claude Code, Codex, Cursor, Windsurf, Cline, Copilot, Antigravity, Gemini CLI, Roo Code, and 13 more
+  — from a single dashboard. Zero dependencies. Fully local.
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> •
-  <a href="#features">Features</a> •
-  <a href="#supported-ides">Supported IDEs</a> •
-  <a href="#supported-models">Supported Models</a> •
-  <a href="#api-reference">API</a> •
-  <a href="#architecture">Architecture</a> •
+  <a href="#quick-start"><img src="https://img.shields.io/badge/setup-30_seconds-2563eb?style=for-the-badge" alt="30s Setup" /></a>
+  <a href="#supported-tools"><img src="https://img.shields.io/badge/tools-22_supported-16a34a?style=for-the-badge" alt="22 Tools" /></a>
+  <a href="#supported-models"><img src="https://img.shields.io/badge/models-50+-7c3aed?style=for-the-badge" alt="50+ Models" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-f59e0b?style=for-the-badge" alt="MIT License" /></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#features">Features</a> &middot;
+  <a href="#supported-tools">Supported Tools</a> &middot;
+  <a href="#architecture">Architecture</a> &middot;
+  <a href="#api-reference">API</a> &middot;
   <a href="#contributing">Contributing</a>
 </p>
 
 ---
 
-## Why?
+## The Problem
 
-You're using AI coding tools daily — Claude Code, Codex, Cursor, maybe Copilot. Each burns through tokens. But there's **no single place** to see your total spend. Until now.
+You use AI coding tools daily — Claude Code, Codex, Cursor, perhaps Copilot. Each burns through tokens at different rates with different pricing. But there is **no unified view** of where your money goes.
 
-**AG-Code Token** reads the session files your AI tools already write to disk, parses them into a unified format, and shows you a beautiful real-time dashboard. No API keys required. No data leaves your machine.
+**AG-Code Token** reads the session files your tools already write to disk, normalizes them into a common format, and renders a real-time dashboard. No API keys. No external services. No data leaves your machine.
 
 ---
 
 ## Quick Start
 
 ```bash
-# Clone
 git clone https://github.com/vuckuola619/ag-code-token.git
 cd ag-code-token
-
-# Run (zero dependencies — no npm install needed!)
 node server.js
-
-# Open
-# → http://localhost:3777
 ```
 
-That's it. The server auto-discovers any installed AI coding tools and starts parsing their session data.
+Open [http://localhost:3777](http://localhost:3777) in your browser. The server auto-discovers installed AI tools and begins parsing session data immediately.
 
-> **Requirements:** Node.js 18+ (uses ES modules and `fetch`). No `npm install` needed — the entire project uses only Node.js built-in modules.
+> **Requirements:** Node.js 18+ (ES modules, native `fetch`). No `npm install` required — the entire project runs on Node.js built-in modules only.
 
 ---
 
 ## Features
 
-### 🎯 Cross-Platform Observability
-Monitor token usage across **9 AI coding IDEs** from a single dashboard. See which tool is burning the most tokens and how much it costs.
+### Cross-IDE Observability
+Monitor token consumption across **22 AI coding tools** from a single interface. Identify which tool, model, or project is driving your costs.
 
-### 💰 Real-Time Cost Tracking
-Automatic cost calculation using live pricing from [LiteLLM](https://github.com/BerriAI/litellm) (cached 24h) with comprehensive hardcoded fallbacks for 50+ models.
+### Real-Time Cost Calculation
+Automatic pricing using live data from [LiteLLM](https://github.com/BerriAI/litellm) (cached 24h) with hardcoded fallbacks covering 50+ models. Supports input, output, cache read, cache write, reasoning, and web search token categories.
 
-### 🔌 Plugin Architecture
-Every AI tool is a provider plugin. Each file in `providers/` implements a standard interface for session discovery, parsing, and normalization. Adding a new tool = adding one file.
+### Token Heatmap
+GitHub-style contribution heatmap visualizing your daily token consumption patterns across the full calendar year.
 
-### 📊 Rich Dashboard
-- **Hero Stats:** Total cost, tokens, API calls, active IDEs
-- **Model Breakdown:** See which LLMs you use most — Claude Opus, GPT-5, Gemini Pro
-- **Provider Breakdown:** Compare Cursor vs Claude Code vs Codex spend
-- **Token Breakdown:** Input, output, cache read/write, reasoning tokens
-- **Tool Usage:** Which agent tools (Read, Edit, Bash, Search) get called most
-- **Project Table:** Per-project cost and usage with provider badges
-- **Token Saving Advisor:** Smart recommendations to reduce token consumption
+### Plugin Architecture
+Every AI tool is a self-contained provider plugin. Each file in `providers/` implements a standard interface for session discovery, parsing, and normalization. Adding support for a new tool means adding a single file.
 
-### 💡 Token Saving Advisor
-Built-in intelligence that analyzes your usage and suggests actionable optimizations:
-- **[RTK](https://github.com/rtk-ai/rtk) integration** — Recommends the CLI proxy that cuts tokens 60-90%
-- **Prompt caching detection** — Flags sessions with 0% cache hits
-- **[LLM-Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)** — Karpathy’s persistent context strategy
-- **Model tiering** — Detects expensive model usage, suggests cheaper alternatives
-- **Cost-per-call alerts** — Warns about oversized context windows
-- **Config tuning** — `.cursorrules`, `.clinerules`, `.gitignore` optimizations
+### Cost Advisor
+Analyze usage patterns and receive actionable optimization recommendations:
+- **[RTK](https://github.com/rtk-ai/rtk) integration** — token reduction proxy (60-90% savings)
+- **Prompt caching detection** — flags sessions with 0% cache utilization
+- **[LLM-Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)** — Karpathy's persistent context strategy
+- **Model tiering** — detects premium model usage where cheaper alternatives apply
+- **Context window alerts** — warns about oversized prompts
+- **Config recommendations** — `.cursorrules`, `.clinerules`, `.gitignore` tuning
 
-### 📤 CSV/JSON Export
-Export your usage data via the dashboard button or API:
+### Dashboard Panels
+- **Hero Stats** — total cost, token count, API calls, active IDEs, Tokscale rank
+- **Model Breakdown** — cost and usage per LLM (Opus 4.6, GPT-5, Gemini Pro, etc.)
+- **Provider Breakdown** — side-by-side comparison across all tools
+- **Token Breakdown** — input, output, cache read, cache write, reasoning tokens
+- **Tool Usage** — agent tool call frequency (Read, Edit, Bash, WebFetch, Search)
+- **Project Table** — per-project cost, token count, and provider badges
+
+### Export
+Download usage data as CSV or JSON via the dashboard or API:
 ```bash
 curl http://localhost:3777/api/export?period=week&format=csv
 curl http://localhost:3777/api/export?period=month&format=json
 ```
 
-### 🏠 Fully Local & Private
-All data stays on your machine. AG-Code Token reads session files from disk — it never phones home, never touches your API keys, never sends telemetry.
+### Privacy
+All data stays on your machine. The only external request is fetching model pricing from a public GitHub JSON file. No telemetry, no tracking, no API keys required. See [SECURITY.md](SECURITY.md) for the full threat model.
 
-### ⚡ Zero Dependencies
-No `npm install`. No `node_modules`. The entire server runs on Node.js built-in modules (`http`, `fs`, `path`, `os`). The dashboard is a single HTML file with inline CSS and JS.
+### Zero Dependencies
+No `npm install`. No `node_modules`. The server uses only Node.js built-in modules (`http`, `fs`, `path`, `os`, `crypto`). The dashboard is a single HTML file with inline CSS and JS.
 
-### 🔄 Auto-Refresh & Caching
-Dashboard auto-refreshes every 5 minutes. Server-side parsing results are cached for 60 seconds to keep the UI snappy even with hundreds of session files.
+### CLI Interface
+Terminal-based usage summary with Tokscale rank calculation:
+```bash
+npx ag-token          # View usage summary
+npx ag-token submit   # Generate leaderboard profile
+```
 
+---
 
-## Supported IDEs
+## Supported Tools
 
-| IDE | Status | Data Source | Session Format |
-|-----|--------|-------------|----------------|
-| **[Antigravity](https://deepmind.google/)** (Google DeepMind) | ✅ Full | `~/.gemini/antigravity/` | Protobuf `.pb` + brain steps |
-| **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** (Anthropic CLI) | ✅ Full | `~/.claude/projects/` | JSONL transcripts |
-| **[Codex](https://openai.com/codex)** (OpenAI CLI) | ✅ Full | `~/.codex/sessions/` | JSONL rollouts |
-| **[Cursor](https://cursor.sh/)** | ✅ Full | `~/.config/Cursor/` | JSON/JSONL logs |
-| **[Windsurf](https://codeium.com/windsurf)** (Codeium) | ✅ Full | `~/.config/Windsurf/` | JSON/JSONL logs |
-| **[Cline](https://github.com/cline/cline)** (VS Code) | ✅ Full | VS Code `globalStorage` | JSON conversation history |
-| **[GitHub Copilot](https://github.com/features/copilot)** | ✅ Full | VS Code `globalStorage` | JSON/JSONL |
-| **[Continue.dev](https://continue.dev/)** | ✅ Full | `~/.continue/sessions/` | JSON session files |
-| **[Aider](https://aider.chat/)** | ✅ Full | `~/.aider/` | JSONL analytics |
+### Core Providers (Full Parsing)
+
+| Tool | Data Source | Session Format |
+|------|------------|----------------|
+| **[Antigravity](https://deepmind.google/)** (Google DeepMind) | `~/.gemini/antigravity/` | Protobuf + brain steps |
+| **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** (Anthropic) | `~/.claude/projects/` | JSONL transcripts |
+| **[Codex](https://openai.com/codex)** (OpenAI) | `~/.codex/sessions/` | JSONL rollouts |
+| **[Cursor](https://cursor.sh/)** | `~/.config/Cursor/` | JSON/JSONL logs |
+| **[Windsurf](https://codeium.com/windsurf)** (Codeium) | `~/.config/Windsurf/` | JSON/JSONL logs |
+| **[Cline](https://github.com/cline/cline)** | VS Code `globalStorage` | JSON history |
+| **[GitHub Copilot](https://github.com/features/copilot)** | VS Code `globalStorage` | JSON/JSONL |
+| **[Continue.dev](https://continue.dev/)** | `~/.continue/sessions/` | JSON sessions |
+| **[Aider](https://aider.chat/)** | `~/.aider/` | JSONL analytics |
+
+### Extended Providers (Heuristic Parsing)
+
+| Tool | Data Source |
+|------|------------|
+| **[OpenCode](https://github.com/opencode-ai/opencode)** | SQLite database |
+| **[Gemini CLI](https://github.com/google-gemini/gemini-cli)** | `~/.gemini/tmp/` |
+| **[AmpCode](https://ampcode.com/)** | `~/.local/share/amp/` |
+| **[Roo Code](https://roocode.com/)** | VS Code `globalStorage` |
+| **[Kilo Code](https://kilocode.ai/)** | VS Code `globalStorage` |
+| **[Factory Droid](https://factory.ai/)** | `~/.factory/sessions/` |
+| **[Pi Agent](https://github.com/pi-agi)** | `~/.pi/agent/sessions/` |
+| **[Kimi CLI](https://kimi.ai/)** | `~/.kimi/sessions/` |
+| **[Qwen CLI](https://qwen.ai/)** | `~/.qwen/projects/` |
+| **Hermes Agent** | `~/.hermes/state.db` |
+| **Synthetic / Octofriend** | SQLite database |
+| **Mux** | `~/.mux/sessions/` |
+| **Crush AI** | `~/.local/share/crush/` |
 
 All providers support **Windows**, **macOS**, and **Linux** path conventions.
 
@@ -126,11 +146,11 @@ All providers support **Windows**, **macOS**, and **Linux** path conventions.
 
 ## Supported Models
 
-AG-Code Token includes pricing for **50+ models** across 9 providers, auto-updated from LiteLLM:
+Pricing data for **50+ models** across 10 providers, refreshed automatically from LiteLLM:
 
 | Provider | Models |
 |----------|--------|
-| **Anthropic** | Claude Opus 4.6, Opus 4.5, Opus 4.1, Sonnet 4.6, Sonnet 4.5, Sonnet 4, Sonnet 3.7, Sonnet 3.5, Haiku 4.5, Haiku 3.5 |
+| **Anthropic** | Opus 4.6, Opus 4.5, Opus 4.1, Sonnet 4.6, Sonnet 4.5, Sonnet 4, Sonnet 3.7, Sonnet 3.5, Haiku 4.5, Haiku 3.5 |
 | **OpenAI** | GPT-5.4, GPT-5, GPT-4.1, GPT-4o, o4-mini, o3, o1 |
 | **Google** | Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.0 Flash, Gemini 1.5 Pro |
 | **DeepSeek** | V3, R1, Coder |
@@ -139,56 +159,7 @@ AG-Code Token includes pricing for **50+ models** across 9 providers, auto-updat
 | **Qwen** | 2.5 Coder 32B, 2.5 72B, Max |
 | **Cohere** | Command R+, Command R |
 | **xAI** | Grok 3, Grok 3 Mini, Grok 2 |
-| **Local** | Ollama, LM Studio, vLLM (free) |
-
----
-
-## API Reference
-
-All endpoints return JSON with `Access-Control-Allow-Origin: *`.
-
-### `GET /api/health`
-```json
-{ "status": "ok", "version": "1.0.0", "timestamp": "2026-04-14T12:00:00.000Z" }
-```
-
-### `GET /api/providers`
-Returns all registered and currently active providers.
-```json
-{
-  "active": [{ "name": "claude", "displayName": "Claude Code", "sessionCount": 42 }],
-  "all": [{ "name": "claude", "displayName": "Claude Code" }, ...]
-}
-```
-
-### `GET /api/summary?period=week&provider=all`
-Aggregate summary for a period. Periods: `today`, `week`, `30days`, `month`, `all`.
-```json
-{
-  "period": "Last 7 Days",
-  "totalCostUSD": 206.19,
-  "totalInputTokens": 13900000,
-  "totalOutputTokens": 5960000,
-  "totalApiCalls": 8,
-  "projectCount": 8,
-  "models": [{ "name": "Opus 4.6", "calls": 5, "costUSD": 171.98 }],
-  "tools": [{ "name": "WebFetch", "calls": 3 }],
-  "providers": [{ "name": "antigravity", "displayName": "Antigravity", "costUSD": 206.19 }],
-  "projects": [{ "project": "my-app", "provider": "claude", "costUSD": 42.00 }]
-}
-```
-
-### `GET /api/projects?period=week&provider=all`
-Per-project breakdown with model and tool details.
-
-### `GET /api/multi-period`
-Summary across all periods in a single call (`today`, `week`, `30days`, `month`).
-
-### `GET /api/export?period=week&format=csv`
-Export data as CSV or JSON. Supports all periods and provider filters.
-
-### `GET /api/tips`
-Returns smart token-saving recommendations based on your current usage patterns.
+| **Local** | Ollama, LM Studio, vLLM (free tier) |
 
 ---
 
@@ -196,54 +167,92 @@ Returns smart token-saving recommendations based on your current usage patterns.
 
 ```
 ag-code-token/
-├── server.js              # Zero-dependency HTTP server (Node.js built-ins only)
-├── models.js              # Universal LLM pricing engine (50+ models, LiteLLM + fallbacks)
-├── parser.js              # Orchestration pipeline: discover → parse → deduplicate → aggregate
+├── server.js                # HTTP server (Node.js built-ins only)
+├── models.js                # LLM pricing engine (LiteLLM + 56 hardcoded fallbacks)
+├── parser.js                # Discovery → parse → deduplicate → aggregate pipeline
+├── security.js              # Rate limiting, CSP, input validation, audit logging
+├── watcher.js               # Real-time filesystem watchers (SSE push)
+├── sql_scanner.js           # Zero-dependency SQLite heuristic scanner
+├── cli.js                   # Terminal interface and profile generator
 ├── providers/
-│   ├── index.js           # Provider registry and discovery
-│   ├── types.js           # TypeScript-style JSDoc interfaces
-│   ├── antigravity.js     # Google DeepMind Antigravity IDE
-│   ├── claude.js          # Anthropic Claude Code CLI + Desktop
-│   ├── codex.js           # OpenAI Codex CLI
-│   ├── cursor.js          # Cursor IDE
-│   ├── windsurf.js        # Windsurf (Codeium)
-│   ├── cline.js           # Cline VS Code extension
-│   ├── copilot.js         # GitHub Copilot
-│   ├── continuedev.js     # Continue.dev
-│   └── aider.js           # Aider CLI
+│   ├── index.js             # Provider registry and discovery
+│   ├── types.js             # JSDoc interface definitions
+│   ├── antigravity.js       # Google DeepMind Antigravity
+│   ├── claude.js            # Anthropic Claude Code
+│   ├── codex.js             # OpenAI Codex CLI
+│   ├── cursor.js            # Cursor IDE
+│   ├── windsurf.js          # Windsurf (Codeium)
+│   ├── cline.js             # Cline VS Code extension
+│   ├── copilot.js           # GitHub Copilot
+│   ├── continuedev.js       # Continue.dev
+│   ├── aider.js             # Aider CLI
+│   ├── extended.js          # 10 additional JSON/JSONL providers
+│   └── sqlite_providers.js  # SQLite-backed providers (OpenCode, Hermes)
 ├── public/
-│   └── index.html         # Single-file dashboard (HTML + CSS + JS)
+│   └── index.html           # Single-file dashboard (HTML + CSS + JS)
 └── package.json
 ```
 
 ### Data Flow
 
 ```
-Session Files on Disk
-        │
-        ▼
-┌─────────────────┐
-│  Provider Plugins │ ── Each provider knows where to find its tool's data
-│  (9 adapters)     │    and how to parse it (JSONL, JSON, Protobuf)
-└────────┬──────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Parser Pipeline  │ ── Deduplication, date filtering, token normalization
-│  (parser.js)      │    (e.g., OpenAI cached-in-input → Anthropic semantics)
-└────────┬──────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Pricing Engine   │ ── LiteLLM (live) + 56 hardcoded fallbacks
-│  (models.js)      │    Cache write, cache read, reasoning, web search costs
-└────────┬──────────┘
-         │
-         ▼
-┌─────────────────┐
-│  HTTP API + UI    │ ── 5 JSON endpoints + responsive dashboard
-│  (server.js)      │
-└───────────────────┘
+ Session files on disk (JSONL, JSON, Protobuf, SQLite)
+                │
+                ▼
+┌──────────────────────────┐
+│  Provider Plugins (22)   │  Each plugin knows where to find its tool's
+│  providers/*.js          │  data and how to parse it
+└───────────┬──────────────┘
+            │
+            ▼
+┌──────────────────────────┐
+│  Parser Pipeline         │  Deduplication, date filtering, token
+│  parser.js               │  normalization across provider semantics
+└───────────┬──────────────┘
+            │
+            ▼
+┌──────────────────────────┐
+│  Pricing Engine          │  LiteLLM live pricing + hardcoded fallbacks
+│  models.js               │  Covers cache, reasoning, and search tokens
+└───────────┬──────────────┘
+            │
+            ▼
+┌──────────────────────────┐
+│  HTTP API + Dashboard    │  JSON endpoints, SSE streaming, static UI
+│  server.js               │  Rate limiting, CSP, security headers
+└──────────────────────────┘
+```
+
+---
+
+## API Reference
+
+All endpoints return JSON. CORS is enabled by default.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/health` | Server status, version, timestamp |
+| `GET /api/providers` | Registered and active providers with session counts |
+| `GET /api/summary?period=week&provider=all` | Aggregate stats for a period (`today`, `week`, `30days`, `month`, `all`) |
+| `GET /api/projects?period=week&provider=all` | Per-project breakdown with model and tool details |
+| `GET /api/multi-period` | Summary across all periods in a single call |
+| `GET /api/export?period=week&format=csv` | Export as CSV or JSON |
+| `GET /api/tips` | Token-saving recommendations based on current usage |
+| `GET /api/events` | Server-Sent Events stream for real-time updates |
+
+### Example Response
+
+```json
+{
+  "period": "All Time",
+  "totalCostUSD": 1342.05,
+  "totalInputTokens": 85400000,
+  "totalOutputTokens": 36600000,
+  "totalApiCalls": 80,
+  "projectCount": 80,
+  "models": [{ "name": "Opus 4.6", "calls": 75, "costUSD": 1342.05 }],
+  "providers": [{ "name": "antigravity", "displayName": "Antigravity", "costUSD": 1342.05 }]
+}
 ```
 
 ---
@@ -251,7 +260,7 @@ Session Files on Disk
 ## Adding a New Provider
 
 1. Create `providers/yourprovider.js`
-2. Implement the `Provider` interface:
+2. Implement the standard interface:
 
 ```javascript
 export const yourprovider = {
@@ -262,14 +271,12 @@ export const yourprovider = {
   toolDisplayName(rawTool) { return rawTool; },
   
   async discoverSessions() {
-    // Return SessionSource[] — paths to session files
     return [{ path: '/path/to/sessions', project: 'my-project', provider: 'yourprovider' }];
   },
   
   createSessionParser(source, seenKeys) {
     return {
       async *parse() {
-        // Yield ParsedProviderCall objects
         yield {
           provider: 'yourprovider',
           model: 'gpt-4o',
@@ -278,7 +285,6 @@ export const yourprovider = {
           costUSD: 0.0075,
           tools: ['edit', 'read'],
           timestamp: new Date().toISOString(),
-          // ... see providers/types.js for full shape
         };
       },
     };
@@ -286,7 +292,9 @@ export const yourprovider = {
 };
 ```
 
-3. Import and register in `providers/index.js`
+3. Register in `providers/index.js`
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for complete guidelines.
 
 ---
 
@@ -308,71 +316,83 @@ PORT=8080 node server.js
 ## FAQ
 
 <details>
-<summary><strong>Do I need to install any npm packages?</strong></summary>
+<summary><strong>Do I need to run npm install?</strong></summary>
 
-No. AG-Code Token uses only Node.js built-in modules. Just `node server.js`.
+No. AG-Code Token uses only Node.js built-in modules. Run `node server.js` directly.
 </details>
 
 <details>
-<summary><strong>Does it send my data anywhere?</strong></summary>
+<summary><strong>Does it transmit any data externally?</strong></summary>
 
-No. Everything runs locally. The only external request is fetching model pricing from LiteLLM's GitHub (a public JSON file), cached for 24 hours. If it fails, hardcoded fallback pricing is used.
+No. The only outgoing request fetches model pricing from LiteLLM's public GitHub repository (a static JSON file), cached for 24 hours. If the request fails, hardcoded pricing is used. No telemetry, no analytics.
 </details>
 
 <details>
-<summary><strong>How does it find my AI tool sessions?</strong></summary>
+<summary><strong>How does it discover my AI tool sessions?</strong></summary>
 
-Each provider plugin knows the default filesystem paths where its tool stores data (e.g., `~/.claude/projects/` for Claude Code). It scans those directories for session files and parses them.
+Each provider plugin knows the default filesystem paths where its tool stores session data. The server scans those directories on startup and watches them for changes via `fs.watch()`, pushing updates over Server-Sent Events.
 </details>
 
 <details>
-<summary><strong>Can I run it permanently?</strong></summary>
+<summary><strong>Can I run it as a background service?</strong></summary>
 
-Yes. Use a process manager like `pm2`:
+Yes. Use any process manager:
 ```bash
 npx pm2 start server.js --name ag-code-token
 ```
 </details>
 
 <details>
-<summary><strong>How accurate is the cost calculation?</strong></summary>
+<summary><strong>How accurate are the cost calculations?</strong></summary>
 
-Very. For tools that log per-token usage (Claude Code, Codex, Cline), costs are calculated using exact token counts and current model pricing. For tools with less granular data, estimation heuristics are used with clear documentation.
+For tools that log per-token usage natively (Claude Code, Codex, Cline, Antigravity), costs are calculated using exact token counts against current model pricing. For tools with less granular data, documented estimation heuristics are applied.
 </details>
 
 ---
 
 ## Roadmap
 
-- [x] 📤 Export to CSV/JSON
-- [x] 💡 Token saving recommendations (RTK, Karpathy LLM-Wiki)
-- [x] 🎨 Radix Colors design system (dark mode, WCAG AA)
-- [ ] 📈 Historical cost charts (daily/weekly trends)
-- [ ] 🔔 Budget alerts and notifications
-- [ ] 📦 npm package for programmatic usage
-- [ ] 🐳 Docker image
-- [ ] 🖥️ System tray app (Electron/Tauri)
-- [ ] 📱 Mobile-friendly responsive redesign
-- [ ] 🔗 Webhook integration (Slack, Discord)
-- [ ] 💱 Multi-currency support
+- [x] CSV and JSON data export
+- [x] Token saving advisor (RTK, LLM-Wiki, model tiering)
+- [x] GitHub-style token heatmap
+- [x] Real-time SSE streaming with filesystem watchers
+- [x] Security hardening (rate limiting, CSP, audit logging)
+- [x] Extended provider support (22 tools)
+- [ ] Historical cost trend charts (daily/weekly)
+- [ ] Budget alerts and threshold notifications
+- [ ] npm package for programmatic usage
+- [ ] Docker image
+- [ ] System tray application (Electron/Tauri)
+- [ ] Webhook integrations (Slack, Discord)
+- [ ] Multi-currency support
+
+---
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for the complete security model, including:
+- Data privacy controls (GDPR Art 5, 25, 32)
+- Network egress allowlisting
+- Rate limiting and CSP headers
+- Input validation and path traversal protection
+- Vulnerability reporting procedures
 
 ---
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-The easiest way to contribute is **adding a new provider** — if you use an AI coding tool that isn't supported yet, open a PR!
+The highest-impact contribution is **adding a new provider**. If you use an AI coding tool that is not yet supported, open a pull request.
 
 ---
 
 ## License
 
-[MIT](LICENSE) — use it however you like.
+[MIT](LICENSE)
 
 ---
 
 <p align="center">
-  <strong>Built with 🔥 by <a href="https://github.com/vuckuola619">vuckuola619</a></strong><br/>
-  <sub>Stop guessing. Start tracking.</sub>
+  <sub>Built by <a href="https://github.com/vuckuola619">vuckuola619</a></sub>
 </p>

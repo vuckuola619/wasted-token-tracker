@@ -4,8 +4,8 @@
 
 | Version | Supported          |
 |---------|--------------------|
-| 1.2.x   | ✅ Current          |
-| < 1.2   | ❌ Not supported    |
+| 1.2.x   | Current release     |
+| < 1.2   | Not supported       |
 
 ## Architecture Security Model
 
@@ -60,14 +60,14 @@ If you discover a security vulnerability, please report it responsibly:
 
 | Standard | Control | Status |
 |----------|---------|--------|
-| GDPR Art 5 | Data minimization | ✅ Implemented |
-| GDPR Art 25 | Privacy by design | ✅ Implemented |
-| GDPR Art 32 | Security of processing | ✅ Implemented |
-| ISO 27001 A.9 | Access control | ✅ Localhost-only |
-| ISO 27001 A.12.4 | Audit logging | ✅ Implemented |
-| ISO 27001 A.13.1 | Network security | ✅ Rate limiting |
-| ISO 27001 A.14.2 | Input validation | ✅ Implemented |
-| SOC 2 CC6.1 | Logical access | ✅ Local-only |
-| SOC 2 CC6.6 | Boundary protection | ✅ Rate limiting |
-| SOC 2 CC7.2 | System monitoring | ✅ Audit logs |
-| SOC 2 CC8.1 | Data integrity | ✅ Validation gates |
+| GDPR Art 5 | Data minimization | Yes Implemented |
+| GDPR Art 25 | Privacy by design | Yes Implemented |
+| GDPR Art 32 | Security of processing | Yes Implemented |
+| ISO 27001 A.9 | Access control | Yes Localhost-only |
+| ISO 27001 A.12.4 | Audit logging | Yes Implemented |
+| ISO 27001 A.13.1 | Network security | Yes Rate limiting |
+| ISO 27001 A.14.2 | Input validation | Yes Implemented |
+| SOC 2 CC6.1 | Logical access | Yes Local-only |
+| SOC 2 CC6.6 | Boundary protection | Yes Rate limiting |
+| SOC 2 CC7.2 | System monitoring | Yes Audit logs |
+| SOC 2 CC8.1 | Data integrity | Yes Validation gates |

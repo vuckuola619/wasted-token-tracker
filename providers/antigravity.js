@@ -19,7 +19,7 @@
  *   2. Number of steps (tool calls) per conversation
  *   3. File modification timestamps for date filtering
  * 
- * Models used: Gemini 2.5 Pro (default), Claude Opus 4.x (via model selection)
+ * Models used: Gemini 3.1 Pro (default), Claude Opus 4.x, Sonnet 4.x (via model selection)
  */
 
 import { readdir, readFile, stat } from 'fs/promises';
@@ -45,17 +45,101 @@ function getBrainDir() {
   return join(getAntigravityDir(), 'brain');
 }
 
+// ─── Model Hints Configuration ─────────────────────────────────────────────────
+// Since Antigravity .pb files are fully binary-compressed (no readable model strings),
+// model detection relies on a user-configurable hints file:
+//   ~/.config/ag-code-token/model_hints.json
+//
+// Format:
+// {
+//   "defaultModel": "claude-opus-4-6",
+//   "conversations": {
+//     "b58d57f9-...": "claude-opus-4-6",
+//     "c000309d-...": "gemini-3.1-pro"
+//   }
+// }
+
+const MODEL_HINTS_PATHS = [
+  join(homedir(), '.config', 'ag-code-token', 'model_hints.json'),
+  join(homedir(), '.ag-code-token', 'model_hints.json'),
+];
+
+let _hintsCache = null;
+let _hintsCacheTime = 0;
+const HINTS_CACHE_TTL = 30_000; // 30s cache
+
 /**
- * Try to detect which model was used from conversation metadata.
- * Antigravity supports model selection (Gemini, Claude Opus, etc.)
- * Default assumption is Gemini 2.5 Pro since it's the Google IDE.
+ * Load model hints from config file.
+ * Cached for 30 seconds to avoid disk thrashing during bulk parsing.
  */
-function detectModel(convId, pbSize) {
-  // Larger conversations (>5MB) likely used an Opus-class model (heavier reasoning)
-  // This is a heuristic — real detection would need protobuf parsing
-  if (pbSize > 15_000_000) return 'claude-opus-4-6';
-  if (pbSize > 8_000_000) return 'claude-opus-4-5';
-  return 'gemini-2.5-pro';
+async function loadModelHints() {
+  const now = Date.now();
+  if (_hintsCache && (now - _hintsCacheTime) < HINTS_CACHE_TTL) return _hintsCache;
+
+  for (const hintsPath of MODEL_HINTS_PATHS) {
+    try {
+      const raw = await readFile(hintsPath, 'utf-8');
+      _hintsCache = JSON.parse(raw);
+      _hintsCacheTime = now;
+      return _hintsCache;
+    } catch {}
+  }
+
+  // No hints file found — return defaults
+  _hintsCache = { defaultModel: 'gemini-3.1-pro', conversations: {} };
+  _hintsCacheTime = now;
+  return _hintsCache;
+}
+
+/**
+ * Get the model hints file path (first writable location).
+ */
+export function getModelHintsPath() {
+  return MODEL_HINTS_PATHS[0];
+}
+
+/**
+ * Save model hints to config file.
+ */
+export async function saveModelHints(hints) {
+  const hintsPath = MODEL_HINTS_PATHS[0];
+  const { mkdir, writeFile: wf } = await import('fs/promises');
+  await mkdir(join(homedir(), '.config', 'ag-code-token'), { recursive: true });
+  await wf(hintsPath, JSON.stringify(hints, null, 2) + '\n');
+  _hintsCache = hints;
+  _hintsCacheTime = Date.now();
+}
+
+/**
+ * Invalidate the model hints cache (called when hints are updated via API).
+ */
+export function invalidateModelHintsCache() {
+  _hintsCache = null;
+  _hintsCacheTime = 0;
+}
+
+/**
+ * Detect which model was used for a conversation.
+ * 
+ * Priority:
+ *   1. Per-conversation override in model_hints.json
+ *   2. Default model from model_hints.json
+ *   3. Hardcoded fallback: gemini-3.1-pro
+ */
+async function detectModel(convId) {
+  const hints = await loadModelHints();
+
+  // Per-conversation override (exact match or prefix match)
+  if (hints.conversations) {
+    if (hints.conversations[convId]) return hints.conversations[convId];
+    // Support prefix matching (first 8 chars)
+    const prefix = convId.slice(0, 8);
+    for (const [key, model] of Object.entries(hints.conversations)) {
+      if (key.startsWith(prefix) || convId.startsWith(key)) return model;
+    }
+  }
+
+  return hints.defaultModel || 'gemini-3.1-pro';
 }
 
 /** @type {import('./types.js').Provider} */
@@ -65,13 +149,20 @@ export const antigravity = {
 
   modelDisplayName(model) {
     const map = {
+      // Gemini 3.x (current)
+      'gemini-3.1-pro': 'Gemini 3.1 Pro',
+      'gemini-3-flash': 'Gemini 3 Flash',
+      // Gemini 2.x (legacy)
       'gemini-2.5-pro': 'Gemini 2.5 Pro',
       'gemini-2.5-flash': 'Gemini 2.5 Flash',
       'gemini-2.0-flash': 'Gemini 2.0 Flash',
-      'claude-opus-4-6': 'Opus 4.6',
+      // Claude
+      'claude-opus-4-6': 'Opus 4.6 (Thinking)',
       'claude-opus-4-5': 'Opus 4.5',
-      'claude-sonnet-4-6': 'Sonnet 4.6',
+      'claude-sonnet-4-6': 'Sonnet 4.6 (Thinking)',
       'claude-sonnet-4-5': 'Sonnet 4.5',
+      // GPT-OSS
+      'gpt-oss-120b': 'GPT-OSS 120B',
     };
     for (const [key, name] of Object.entries(map)) {
       if (model.includes(key)) return name;
@@ -141,7 +232,7 @@ export const antigravity = {
         const pbSize = pbStat.size;
         if (pbSize < 100) return; // Skip empty/tiny conversations
 
-        const model = detectModel(convId, pbSize);
+        const model = await detectModel(convId);
         const timestamp = pbStat.mtime.toISOString();
 
         // ─── Estimate tokens from protobuf size ───

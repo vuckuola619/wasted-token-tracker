@@ -4,7 +4,7 @@
  * Supports ALL major LLM providers and models:
  *   - Anthropic (Claude Opus, Sonnet, Haiku — all versions)
  *   - OpenAI (GPT-5.x, GPT-4o, o3, o4-mini)
- *   - Google (Gemini 2.5 Pro, Flash, etc.)
+ *   - Google (Gemini 3.1 Pro, 3 Flash, 2.5 Pro, Flash, etc.)
  *   - DeepSeek (V3, R1, Coder)
  *   - Meta (Llama 4, 3.x)
  *   - Mistral (Large, Medium, Small, Codestral)
@@ -59,6 +59,8 @@ const FALLBACK_PRICING = {
   'o1-mini':             { inputCostPerToken: 3e-6,    outputCostPerToken: 12e-6,  cacheWriteCostPerToken: 3e-6,    cacheReadCostPerToken: 1.5e-6,  webSearchCostPerRequest: WEB_SEARCH_COST, fastMultiplier: 1 },
 
   // ─── Google Gemini ───
+  'gemini-3.1-pro':      { inputCostPerToken: 1.5e-6,  outputCostPerToken: 12e-6,  cacheWriteCostPerToken: 1.5e-6,  cacheReadCostPerToken: 0.375e-6,webSearchCostPerRequest: WEB_SEARCH_COST, fastMultiplier: 1 },
+  'gemini-3-flash':      { inputCostPerToken: 0.1e-6,  outputCostPerToken: 0.4e-6, cacheWriteCostPerToken: 0.1e-6,  cacheReadCostPerToken: 0.025e-6,webSearchCostPerRequest: WEB_SEARCH_COST, fastMultiplier: 1 },
   'gemini-2.5-pro':      { inputCostPerToken: 1.25e-6, outputCostPerToken: 10e-6,  cacheWriteCostPerToken: 1.25e-6, cacheReadCostPerToken: 0.315e-6,webSearchCostPerRequest: WEB_SEARCH_COST, fastMultiplier: 1 },
   'gemini-2.5-flash':    { inputCostPerToken: 0.15e-6, outputCostPerToken: 0.6e-6, cacheWriteCostPerToken: 0.15e-6, cacheReadCostPerToken: 0.0375e-6,webSearchCostPerRequest: WEB_SEARCH_COST, fastMultiplier: 1 },
   'gemini-2.0-flash':    { inputCostPerToken: 0.1e-6,  outputCostPerToken: 0.4e-6, cacheWriteCostPerToken: 0.1e-6,  cacheReadCostPerToken: 0.025e-6,webSearchCostPerRequest: WEB_SEARCH_COST, fastMultiplier: 1 },
@@ -103,6 +105,9 @@ const FALLBACK_PRICING = {
   // ─── Local/Self-hosted (zero cost) ───
   'local':               { inputCostPerToken: 0, outputCostPerToken: 0, cacheWriteCostPerToken: 0, cacheReadCostPerToken: 0, webSearchCostPerRequest: 0, fastMultiplier: 1 },
   'ollama':              { inputCostPerToken: 0, outputCostPerToken: 0, cacheWriteCostPerToken: 0, cacheReadCostPerToken: 0, webSearchCostPerRequest: 0, fastMultiplier: 1 },
+
+  // ─── GPT-OSS (Open-source variant available in Antigravity) ───
+  'gpt-oss-120b':        { inputCostPerToken: 0.6e-6,  outputCostPerToken: 1.8e-6, cacheWriteCostPerToken: 0.6e-6,  cacheReadCostPerToken: 0.15e-6, webSearchCostPerRequest: 0, fastMultiplier: 1 },
 };
 
 // ─── Display name mapping (canonical → friendly) ──────────────────────────────
@@ -136,6 +141,8 @@ const SHORT_MODEL_NAMES = {
   'o1-mini':             'o1-mini',
   'o1':                  'o1',
   // Google
+  'gemini-3.1-pro':      'Gemini 3.1 Pro',
+  'gemini-3-flash':      'Gemini 3 Flash',
   'gemini-2.5-pro':      'Gemini 2.5 Pro',
   'gemini-2.5-flash':    'Gemini 2.5 Flash',
   'gemini-2.0-flash':    'Gemini 2.0 Flash',
@@ -170,6 +177,8 @@ const SHORT_MODEL_NAMES = {
   'grok-3':              'Grok 3',
   'grok-3-mini':         'Grok 3 Mini',
   'grok-2':              'Grok 2',
+  // GPT-OSS
+  'gpt-oss-120b':        'GPT-OSS 120B',
 };
 
 let pricingCache = null;
@@ -309,7 +318,7 @@ export function getAllModelFamilies() {
   return [
     { family: 'Anthropic', models: ['Opus 4.6', 'Opus 4.5', 'Sonnet 4.6', 'Sonnet 4.5', 'Sonnet 4', 'Haiku 4.5'] },
     { family: 'OpenAI', models: ['GPT-5.4', 'GPT-5', 'GPT-4o', 'o4-mini', 'o3', 'o1'] },
-    { family: 'Google', models: ['Gemini 2.5 Pro', 'Gemini 2.5 Flash', 'Gemini 2.0 Flash'] },
+    { family: 'Google', models: ['Gemini 3.1 Pro', 'Gemini 3 Flash', 'Gemini 2.5 Pro', 'Gemini 2.5 Flash'] },
     { family: 'DeepSeek', models: ['DeepSeek V3', 'DeepSeek R1', 'DeepSeek Coder'] },
     { family: 'Mistral', models: ['Mistral Large', 'Codestral', 'Mistral Small'] },
     { family: 'Meta', models: ['Llama 4 Maverick', 'Llama 4 Scout', 'Llama 3.3 70B'] },

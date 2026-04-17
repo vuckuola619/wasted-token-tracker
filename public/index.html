@@ -557,7 +557,9 @@
         const d = new Date(item[0]);
         const start = new Date(d.getFullYear(), 0, 1);
         const w = Math.floor((((d - start) / 86400000) + start.getDay() + 1) / 7);
-        data3d.push([w, d.getDay(), item[1]]);
+        const wStr = weeks[w] || ('W' + w);
+        const dStr = days[d.getDay()];
+        data3d.push([wStr, dStr, item[1]]);
       });
 
       skylineChart.setOption({
@@ -572,9 +574,10 @@
           axisLine: { lineStyle: { color: '#3f3f46' } },
           axisLabel: { textStyle: { color: '#a1a1aa', fontSize: 10 } },
           splitLine: { lineStyle: { color: '#27272a' } },
-          axisPointer: { show: false }
+          axisPointer: { show: false },
+          light: { main: { intensity: 1.2, shadow: false }, ambient: { intensity: 0.8, color: '#ffffff' } }
         },
-        series: [{ type: 'bar3D', data: data3d, shading: 'realistic', label: { show: false } }]
+        series: [{ type: 'bar3D', data: data3d, shading: 'color', label: { show: false } }]
       });
 
       window.addEventListener('resize', () => { setTimeout(() => { heatmapChart.resize(); skylineChart.resize(); }, 100); });
@@ -622,8 +625,10 @@
         setLive(false);
       }
     }
-    init();
-    setInterval(()=>{if(!sse||sse.readyState===EventSource.CLOSED)loadSummary();},300000);
+    window.addEventListener('load', () => {
+      init();
+      setInterval(()=>{if(!sse||sse.readyState===EventSource.CLOSED)loadSummary();},300000);
+    });
   </script>
 </body>
 </html>
