@@ -1,0 +1,10 @@
+.git
+.gitignore
+node_modules
+*.md
+LICENSE
+ag-profile.json
+.env
+.dockerignore
+docker-compose.yml
+tray/

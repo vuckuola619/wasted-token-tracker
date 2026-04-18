@@ -95,13 +95,51 @@ curl http://localhost:3777/api/export?period=month&format=json
 All data stays on your machine. The only external request is fetching model pricing from a public GitHub JSON file. No telemetry, no tracking, no API keys required. See [SECURITY.md](SECURITY.md) for the full threat model.
 
 ### Zero Dependencies
-No `npm install`. No `node_modules`. The server uses only Node.js built-in modules (`http`, `fs`, `path`, `os`, `crypto`). The dashboard is a single HTML file with inline CSS and JS.
+No `npm install`. No `node_modules`. The server uses only Node.js built-in modules (`http`, `fs`, `path`, `os`, `crypto`). The dashboard is a single HTML file with ECharts (CDN) for visualizations.
 
-### CLI Interface
-Terminal-based usage summary with Tokscale rank calculation:
+### Historical Cost Trends
+Interactive bar+line chart showing daily or weekly cost history with cumulative spending overlay. Toggle granularity and compare spending patterns over any time period.
+
+### Budget Alerts
+Configurable spending thresholds with real-time breach detection:
+- Per-period budgets (daily, weekly, monthly)
+- Per-provider budgets (optional)
+- Warning levels at 50%, 80%, 100%, and 150%
+- Cooldown-based notification suppression
+- Breach history tracking in `~/.ag-code-token/budgets.json`
+
+### Webhook Integrations
+Automated notifications to external services:
+- **Slack** — Incoming Webhooks with Block Kit formatting
+- **Discord** — Rich embed messages with color-coded severity
+- **Telegram** — Bot API with MarkdownV2 formatting
+- **Generic HTTP** — POST JSON to any endpoint
+- Events: budget alerts, daily summaries, threshold breaches
+
+### Multi-Currency Support
+12 currencies with ECB exchange rate API (24h cache + offline fallback):
+USD, EUR, GBP, JPY, CNY, KRW, INR, BRL, CAD, AUD, CHF, THB
+
+### System Tray Mode
+Run as a background service with OS-native notifications:
 ```bash
-npx ag-token          # View usage summary
-npx ag-token submit   # Generate leaderboard profile
+node cli.js tray          # Start in background
+node cli.js tray --stop   # Stop background server
+node cli.js tray --status # Check status
+```
+
+### Docker
+```bash
+docker compose up -d
+# Dashboard at http://localhost:3777
+```
+
+### npm Package
+Programmatic API for CI/CD integration:
+```javascript
+import { getSummary, getProviders } from 'ag-code-token';
+const today = await getSummary('today');
+console.log(`Cost: $${today.totalCostUSD.toFixed(2)}`);
 ```
 
 ---
@@ -167,13 +205,21 @@ Pricing data for **50+ models** across 10 providers, refreshed automatically fro
 
 ```
 ag-code-token/
-├── server.js                # HTTP server (Node.js built-ins only)
+├── server.js                # HTTP server, API routing, SSE, auth
 ├── models.js                # LLM pricing engine (LiteLLM + 56 hardcoded fallbacks)
-├── parser.js                # Discovery → parse → deduplicate → aggregate pipeline
-├── security.js              # Rate limiting, CSP, input validation, audit logging
+├── parser.js                # Discovery -> parse -> deduplicate -> aggregate pipeline
+├── security.js              # Rate limiting, CSP, auth, HMAC audit, input validation
 ├── watcher.js               # Real-time filesystem watchers (SSE push)
+├── budget.js                # Budget thresholds, breach detection, notifications
+├── webhooks.js              # Slack/Discord/Telegram/HTTP webhook dispatch
+├── currency.js              # Multi-currency conversion (ECB API + offline fallback)
+├── index.js                 # npm programmatic API exports
+├── cli.js                   # Terminal interface (budget, webhooks, currency, export)
 ├── sql_scanner.js           # Zero-dependency SQLite heuristic scanner
-├── cli.js                   # Terminal interface and profile generator
+├── Dockerfile               # Multi-stage Alpine build
+├── docker-compose.yml       # Production container orchestration
+├── tray/
+│   └── launcher.js          # System tray background runner
 ├── providers/
 │   ├── index.js             # Provider registry and discovery
 │   ├── types.js             # JSDoc interface definitions
@@ -189,7 +235,8 @@ ag-code-token/
 │   ├── extended.js          # 10 additional JSON/JSONL providers
 │   └── sqlite_providers.js  # SQLite-backed providers (OpenCode, Hermes)
 ├── public/
-│   └── index.html           # Single-file dashboard (HTML + CSS + JS)
+│   ├── index.html           # Dashboard SPA shell
+│   └── app.js               # Frontend logic (charts, SSE, budget, currency)
 └── package.json
 ```
 
@@ -229,16 +276,22 @@ ag-code-token/
 
 All endpoints return JSON. CORS is enabled by default.
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/health` | Server status, version, timestamp |
-| `GET /api/providers` | Registered and active providers with session counts |
-| `GET /api/summary?period=week&provider=all` | Aggregate stats for a period (`today`, `week`, `30days`, `month`, `all`) |
-| `GET /api/projects?period=week&provider=all` | Per-project breakdown with model and tool details |
-| `GET /api/multi-period` | Summary across all periods in a single call |
-| `GET /api/export?period=week&format=csv` | Export as CSV or JSON |
-| `GET /api/tips` | Token-saving recommendations based on current usage |
-| `GET /api/events` | Server-Sent Events stream for real-time updates |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Server status, version, uptime |
+| `/api/providers` | GET | Registered and active providers with session counts |
+| `/api/summary` | GET | Aggregate stats for a period (`today`, `week`, `30days`, `month`, `all`) |
+| `/api/projects` | GET | Per-project breakdown with model and tool details |
+| `/api/trends` | GET | Historical cost/token timeseries (daily or weekly granularity) |
+| `/api/multi-period` | GET | Summary across all periods in a single call |
+| `/api/export` | GET | Export as CSV or JSON |
+| `/api/tips` | GET | Token-saving recommendations based on current usage |
+| `/api/budget` | GET/PUT | Budget thresholds, current spending, alert status |
+| `/api/webhooks` | GET/PUT | Webhook configurations (Slack, Discord, Telegram, HTTP) |
+| `/api/webhooks/test` | POST | Test a webhook configuration |
+| `/api/currency` | GET/PUT | Currency preference and exchange rates |
+| `/api/events` | SSE | Server-Sent Events stream for real-time updates |
+| `/api/cache` | DELETE | Purge all cached data (GDPR right to erasure) |
 
 ### Example Response
 
@@ -303,12 +356,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for complete guidelines.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `3777` | HTTP server port |
+| `AG_TOKEN_HOST` | `127.0.0.1` | Bind address |
+| `AG_TOKEN_AUTH` | — | Set to `required` to enforce Bearer token auth |
+| `AG_TOKEN_NO_AUTH` | — | Set to `1` to disable authentication entirely |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code configuration directory |
 | `CODEX_HOME` | `~/.codex` | Codex CLI home directory |
 | `ANTIGRAVITY_DIR` | `~/.gemini/antigravity` | Antigravity data directory |
 
 ```bash
-PORT=8080 node server.js
+PORT=8080 AG_TOKEN_AUTH=required node server.js
 ```
 
 ---
@@ -356,15 +412,20 @@ For tools that log per-token usage natively (Claude Code, Codex, Cline, Antigrav
 - [x] Token saving advisor (RTK, LLM-Wiki, model tiering)
 - [x] GitHub-style token heatmap
 - [x] Real-time SSE streaming with filesystem watchers
-- [x] Security hardening (rate limiting, CSP, audit logging)
+- [x] Security hardening (rate limiting, CSP, HMAC audit logging)
 - [x] Extended provider support (22 tools)
-- [ ] Historical cost trend charts (daily/weekly)
-- [ ] Budget alerts and threshold notifications
-- [ ] npm package for programmatic usage
-- [ ] Docker image
-- [ ] System tray application (Electron/Tauri)
-- [ ] Webhook integrations (Slack, Discord)
-- [ ] Multi-currency support
+- [x] Historical cost trend charts (daily/weekly)
+- [x] Budget alerts and threshold notifications
+- [x] Webhook integrations (Slack, Discord, Telegram, HTTP)
+- [x] Multi-currency support (12 currencies via ECB)
+- [x] npm package for programmatic usage
+- [x] Docker image (multi-stage Alpine build)
+- [x] System tray background runner
+- [x] Token-based API authentication
+- [x] 3D token skyline visualization
+- [ ] Team/org multi-user dashboards
+- [ ] Custom alert rules engine
+- [ ] Grafana/Prometheus metrics export
 
 ---
 

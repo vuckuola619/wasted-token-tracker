@@ -18,10 +18,28 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { homedir } from 'os';
+import { createHash } from 'crypto';
 
 const LITELLM_URL = 'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const WEB_SEARCH_COST = 0.01;
+const MAX_COST_PER_TOKEN = 0.001; // $1 per 1K tokens — upper sanity bound
+
+/**
+ * Validate that a pricing entry has reasonable values.
+ * Rejects entries with negative costs, non-finite numbers, or absurdly high prices.
+ */
+function validatePricingEntry(costs) {
+  const fields = ['inputCostPerToken', 'outputCostPerToken', 'cacheWriteCostPerToken', 'cacheReadCostPerToken'];
+  for (const f of fields) {
+    if (typeof costs[f] !== 'number' || !Number.isFinite(costs[f]) || costs[f] < 0 || costs[f] > MAX_COST_PER_TOKEN) {
+      return false;
+    }
+  }
+  if (typeof costs.webSearchCostPerRequest !== 'number' || costs.webSearchCostPerRequest < 0) return false;
+  if (typeof costs.fastMultiplier !== 'number' || costs.fastMultiplier < 0 || costs.fastMultiplier > 100) return false;
+  return true;
+}
 
 // ─── Comprehensive Fallback Pricing (per token) ────────────────────────────────
 // Covers every major model family. Prices in USD per token.
@@ -206,18 +224,51 @@ function parseLiteLLMEntry(entry) {
 async function fetchAndCachePricing() {
   const response = await fetch(LITELLM_URL);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const data = await response.json();
+
+  // Integrity check 1: Verify content-type
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json') && !contentType.includes('text/plain')) {
+    throw new Error(`Unexpected content-type from pricing CDN: ${contentType}`);
+  }
+
+  const rawText = await response.text();
+
+  // Integrity check 2: Compute SHA-256 hash for auditability
+  const hash = createHash('sha256').update(rawText).digest('hex');
+  console.log(`[models] LiteLLM pricing SHA-256: ${hash.slice(0, 16)}...`);
+
+  // Integrity check 3: Parse and validate JSON structure
+  let data;
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    throw new Error('Malformed JSON in pricing response — possible CDN compromise');
+  }
+
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Pricing data has invalid root structure — expected an object');
+  }
+
   const pricing = new Map();
 
   for (const [name, entry] of Object.entries(data)) {
     if (name.includes('/') || name.includes('.')) continue;
     const costs = parseLiteLLMEntry(entry);
-    if (costs) pricing.set(name, costs);
+    if (costs) {
+      // Integrity check 4: Validate reasonable value ranges
+      if (!validatePricingEntry(costs)) {
+        console.warn(`[models] Rejecting invalid pricing for: ${name}`);
+        continue;
+      }
+      // Integrity check 5: Freeze to prevent post-load mutation
+      pricing.set(name, Object.freeze(costs));
+    }
   }
 
   await mkdir(getCacheDir(), { recursive: true });
   await writeFile(getCachePath(), JSON.stringify({
     timestamp: Date.now(),
+    sha256: hash,
     data: Object.fromEntries(pricing),
   }));
 
@@ -229,7 +280,7 @@ async function loadCachedPricing() {
     const raw = await readFile(getCachePath(), 'utf-8');
     const cached = JSON.parse(raw);
     if (Date.now() - cached.timestamp > CACHE_TTL_MS) return null;
-    return new Map(Object.entries(cached.data));
+    return new Map(Object.entries(cached.data).map(([k, v]) => [k, Object.freeze(v)]));
   } catch {
     return null;
   }
@@ -246,7 +297,7 @@ export async function loadPricing() {
     pricingCache = await fetchAndCachePricing();
     console.log(`[models] Fetched LiteLLM pricing (${pricingCache.size} models)`);
   } catch {
-    pricingCache = new Map(Object.entries(FALLBACK_PRICING));
+    pricingCache = new Map(Object.entries(FALLBACK_PRICING).map(([k, v]) => [k, Object.freeze(v)]));
     console.log(`[models] Using fallback pricing (${pricingCache.size} models)`);
   }
 }

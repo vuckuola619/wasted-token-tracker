@@ -1,0 +1,48 @@
+# ────────────────────────────────────────────
+# AG-Code Token — Docker Compose
+#
+# Usage: docker compose up -d
+# ────────────────────────────────────────────
+
+services:
+  ag-code-token:
+    build: .
+    image: ag-code-token:latest
+    container_name: ag-code-token
+    restart: unless-stopped
+    ports:
+      - "3777:3777"
+    environment:
+      - PORT=3777
+      - AG_TOKEN_HOST=0.0.0.0
+      - AG_TOKEN_AUTH=required
+      - NODE_ENV=production
+    volumes:
+      # Persistent config & audit logs
+      - ag-token-config:/home/agtoken/.ag-code-token
+
+      # AI coding tool session directories (read-only)
+      # Uncomment the ones you use:
+      - ${HOME}/.gemini:${HOME}/.gemini:ro                  # Antigravity
+      # - ${HOME}/.claude:${HOME}/.claude:ro                # Claude Code
+      # - ${HOME}/.codex:${HOME}/.codex:ro                  # Codex CLI
+      # - ${HOME}/.cursor:${HOME}/.cursor:ro                # Cursor
+      # - ${HOME}/.codeium:${HOME}/.codeium:ro              # Windsurf
+      # - ${HOME}/.cline:${HOME}/.cline:ro                  # Cline
+      # - ${HOME}/.continue:${HOME}/.continue:ro            # Continue.dev
+      # - ${HOME}/.aider:${HOME}/.aider:ro                  # Aider
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3777/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+volumes:
+  ag-token-config:
+    driver: local

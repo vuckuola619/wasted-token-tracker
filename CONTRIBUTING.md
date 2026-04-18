@@ -58,9 +58,42 @@ node --watch server.js
 # Run the CLI
 node cli.js
 
+# Budget management
+node cli.js budget --set-daily 10 --set-weekly 50
+
+# Webhook testing
+node cli.js webhook --add slack --url https://hooks.slack.com/...
+
+# Currency configuration
+node cli.js currency --set EUR
+
 # Generate a leaderboard profile
 node cli.js submit
+
+# Run in Docker
+docker compose up -d
+
+# System tray mode
+node cli.js tray
 ```
+
+## Module Architecture
+
+The project follows a zero-dependency philosophy. Each module handles a single concern:
+
+| Module | Responsibility |
+|--------|---------------|
+| `server.js` | HTTP server, API routing, SSE, static serving |
+| `parser.js` | Session discovery, parsing, deduplication, aggregation |
+| `security.js` | Auth, rate limiting, CSP, HMAC audit, input validation |
+| `budget.js` | Budget thresholds, breach detection, alert callbacks |
+| `webhooks.js` | Slack/Discord/Telegram/HTTP webhook dispatch |
+| `currency.js` | Multi-currency conversion (ECB API + offline fallback) |
+| `watcher.js` | Filesystem watchers, SSE connection management |
+| `models.js` | LLM pricing engine (LiteLLM + local fallbacks) |
+| `index.js` | npm programmatic API exports |
+
+When adding new features, create a new module file rather than extending `server.js`.
 
 ---
 

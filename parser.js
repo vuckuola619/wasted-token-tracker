@@ -10,6 +10,7 @@
 import { discoverAllSessions, getProvider } from './providers/index.js';
 import { getShortModelName } from './models.js';
 import { validateTokenCounts, validateTimestamp, auditLog } from './security.js';
+import { convertFromUSD, getCurrentCurrency } from './currency.js';
 
 // ─── Caching ───────────────────────────────────────────────────────────────────
 const CACHE_TTL_MS = 60_000; // 60 seconds

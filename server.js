@@ -1,16 +1,25 @@
 /**
- * AG-Code Token — Universal AI Token Monitor Server (v1.2.0)
+ * AG-Code Token — Universal AI Token Monitor Server (v1.3.0)
  * 
- * Zero-dependency HTTP server with real-time file watching and
- * ISO 27001 / GDPR / SOC 2 security hardening.
+ * Zero-dependency HTTP server with real-time file watching,
+ * ISO 27001 / GDPR / SOC 2 security hardening, budget alerts,
+ * webhook integrations, multi-currency support, and system tray.
  * 
  * Endpoints:
  *   - GET /                → Dashboard (web UI)
  *   - GET /api/summary     → Aggregate summary for a period
+ *   - GET /api/trends      → Historical cost/token timeseries
  *   - GET /api/providers   → Active providers on this machine
  *   - GET /api/projects    → Per-project breakdown
  *   - GET /api/export      → CSV/JSON export
  *   - GET /api/tips        → Token saving recommendations
+ *   - GET /api/budget      → Budget config + status
+ *   - PUT /api/budget      → Update budget thresholds
+ *   - GET /api/webhooks    → Webhook config
+ *   - PUT /api/webhooks    → Update webhook config
+ *   - POST /api/webhooks/test → Test a webhook
+ *   - GET /api/currency    → Currency config + rates
+ *   - PUT /api/currency    → Change currency
  *   - GET /api/events      → Server-Sent Events (real-time)
  *   - GET /api/health      → Health check (with watcher status)
  *   - DELETE /api/cache    → Purge all cached data (GDPR erasure)
@@ -20,7 +29,7 @@
 
 import http from 'http';
 import { readFile } from 'fs/promises';
-import { join, dirname, extname, resolve, normalize } from 'path';
+import { join, dirname, extname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { loadPricing } from './models.js';
 import { getAggregateSummary, parseAllSessions, getDateRange, invalidateCache } from './parser.js';
@@ -32,11 +41,28 @@ import {
   ValidationError, isPathSafe, csvSafe, auditLog,
   initSecurity, shutdownSecurity, canAcceptSSE, incrementSSE,
   decrementSSE, getSSECount, isURLLengthValid, validateTokenCounts,
+  validateAuth, isAuthRequired, getAuthToken,
 } from './security.js';
+import {
+  loadBudgetConfig, saveBudgetConfig, getBudgetConfig,
+  checkBudgets, processAlerts, onBudgetAlert,
+  getBreachHistory, computeSpending,
+} from './budget.js';
+import {
+  loadWebhookConfig, saveWebhookConfig, getWebhookConfig,
+  sendWebhookNotification, testWebhook,
+} from './webhooks.js';
+import {
+  loadCurrencyConfig, saveCurrencyConfig,
+  convertFromUSD, getAvailableCurrencies, getCurrentCurrency,
+  getRatesInfo,
+} from './currency.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3777;
-const VERSION = '1.2.0';
+const HOST = process.env.AG_TOKEN_HOST || '127.0.0.1';
+const VERSION = '1.3.0';
+const VALID_PERIODS = new Set(['today', 'week', '30days', 'month', 'all']);
 
 // ─── MIME Types ────────────────────────────────────────────────────────────────
 const MIME = {
@@ -153,6 +179,146 @@ async function handleAPI(req, res) {
         models: p.modelBreakdown,
         tools: p.toolBreakdown,
       })));
+    }
+
+    // ─── Historical Cost Trends API ────────────────────────────────────
+    if (path === '/api/trends') {
+      const granularity = url.searchParams.get('granularity') || 'daily';
+      const targetPeriod = VALID_PERIODS.has(params.period) ? params.period : '30days';
+      const { range } = getDateRange(targetPeriod);
+      const projects = await parseAllSessions(range, params.provider);
+
+      // Build daily cost + token timeseries
+      const dailyMap = {};
+      for (const proj of projects) {
+        for (const call of proj.calls) {
+          if (!call.timestamp) continue;
+          const day = call.timestamp.slice(0, 10);
+          if (!dailyMap[day]) dailyMap[day] = { date: day, cost: 0, tokens: 0, calls: 0 };
+          dailyMap[day].cost += call.costUSD || 0;
+          dailyMap[day].tokens += (call.inputTokens || 0) + (call.outputTokens || 0);
+          dailyMap[day].calls += 1;
+        }
+      }
+
+      let timeseries = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
+
+      // Weekly aggregation
+      if (granularity === 'weekly') {
+        const weeklyMap = {};
+        for (const d of timeseries) {
+          const dt = new Date(d.date);
+          const weekStart = new Date(dt);
+          weekStart.setDate(dt.getDate() - dt.getDay());
+          const key = weekStart.toISOString().slice(0, 10);
+          if (!weeklyMap[key]) weeklyMap[key] = { date: key, cost: 0, tokens: 0, calls: 0 };
+          weeklyMap[key].cost += d.cost;
+          weeklyMap[key].tokens += d.tokens;
+          weeklyMap[key].calls += d.calls;
+        }
+        timeseries = Object.values(weeklyMap).sort((a, b) => a.date.localeCompare(b.date));
+      }
+
+      // Add currency conversion
+      const currency = getCurrentCurrency();
+      for (const entry of timeseries) {
+        const converted = convertFromUSD(entry.cost);
+        entry.costLocal = converted.value;
+        entry.currency = converted.currency;
+        entry.costFormatted = converted.formatted;
+      }
+
+      // Compute running total
+      let runningCost = 0;
+      for (const entry of timeseries) {
+        runningCost += entry.cost;
+        entry.cumulativeCost = Math.round(runningCost * 100) / 100;
+      }
+
+      return json(res, {
+        period: targetPeriod,
+        granularity,
+        currency,
+        timeseries,
+        summary: {
+          totalDays: timeseries.length,
+          avgDailyCost: timeseries.length > 0 ? runningCost / timeseries.length : 0,
+          maxDailyCost: timeseries.length > 0 ? Math.max(...timeseries.map(t => t.cost)) : 0,
+          totalCost: runningCost,
+        },
+      });
+    }
+
+    // ─── Budget API ───────────────────────────────────────────────────────
+    if (path === '/api/budget') {
+      if (req.method === 'GET') {
+        const config = getBudgetConfig();
+        // Compute current spending
+        const summaries = {};
+        for (const p of ['today', 'week', 'month']) {
+          summaries[p] = await getAggregateSummary(p, 'all');
+        }
+        const spending = computeSpending(summaries);
+        const alerts = checkBudgets(spending);
+        const breaches = getBreachHistory(10);
+        const currency = getCurrentCurrency();
+
+        return json(res, {
+          config,
+          spending: {
+            daily: { spent: spending.daily, budget: config.daily, ...convertFromUSD(spending.daily) },
+            weekly: { spent: spending.weekly, budget: config.weekly, ...convertFromUSD(spending.weekly) },
+            monthly: { spent: spending.monthly, budget: config.monthly, ...convertFromUSD(spending.monthly) },
+          },
+          alerts: alerts.filter(a => !a.coolingDown),
+          breaches,
+          currency,
+        });
+      }
+      if (req.method === 'PUT' || req.method === 'POST') {
+        const body = await readRequestBody(req);
+        const config = JSON.parse(body);
+        await saveBudgetConfig(config);
+        return json(res, { status: 'ok', config: getBudgetConfig() });
+      }
+    }
+
+    // ─── Webhook API ──────────────────────────────────────────────────────
+    if (path === '/api/webhooks') {
+      if (req.method === 'GET') {
+        return json(res, getWebhookConfig());
+      }
+      if (req.method === 'PUT' || req.method === 'POST') {
+        const body = await readRequestBody(req);
+        const config = JSON.parse(body);
+        await saveWebhookConfig(config);
+        return json(res, { status: 'ok', config: getWebhookConfig() });
+      }
+    }
+    if (path === '/api/webhooks/test') {
+      if (req.method === 'POST') {
+        const body = await readRequestBody(req);
+        const hook = JSON.parse(body);
+        const result = await testWebhook(hook);
+        return json(res, result);
+      }
+    }
+
+    // ─── Currency API ─────────────────────────────────────────────────────
+    if (path === '/api/currency') {
+      if (req.method === 'GET') {
+        return json(res, {
+          current: getCurrentCurrency(),
+          currencies: getAvailableCurrencies(),
+          rates: getRatesInfo(),
+        });
+      }
+      if (req.method === 'PUT' || req.method === 'POST') {
+        const body = await readRequestBody(req);
+        const { currency } = JSON.parse(body);
+        await saveCurrencyConfig(currency);
+        return json(res, { status: 'ok', currency: getCurrentCurrency() });
+      }
     }
 
     if (path === '/api/multi-period') {
@@ -393,9 +559,20 @@ function generateTokenSavingTips(summary) {
 
 // ─── Static File Serving (with path traversal protection) ──────────────────────
 async function serveStatic(req, res) {
-  let filePath = req.url === '/' ? '/index.html' : req.url.split('?')[0]; // Strip query string
+  const rawPath = req.url === '/' ? '/index.html' : req.url.split('?')[0]; // Strip query string
 
-  // Security: path traversal protection
+  // Step 1: Fully decode the URL before any path operations.
+  // This defeats %2e%2e%2f and double-encoding bypasses.
+  let filePath;
+  try {
+    filePath = decodeURIComponent(rawPath);
+  } catch {
+    res.statusCode = 400;
+    res.setHeader('Content-Type', 'text/plain');
+    return res.end('Bad Request');
+  }
+
+  // Step 2: Regex/heuristic check on the decoded path
   if (!isPathSafe(filePath)) {
     auditLog('path_traversal_blocked', { path: filePath, level: 'warn' });
     res.statusCode = 403;
@@ -403,21 +580,38 @@ async function serveStatic(req, res) {
     return res.end('Forbidden');
   }
 
-  const publicDir = join(__dirname, 'public');
-  const fullPath = normalize(join(publicDir, filePath));
+  // Step 3: Resolve to absolute path and verify containment.
+  // Strip leading slashes to prevent resolve() treating it as an absolute path.
+  const publicDir = resolve(__dirname, 'public');
+  const fullPath = resolve(publicDir, filePath.replace(/^\/+/, ''));
 
-  // Ensure resolved path is within public directory (belt-and-suspenders)
-  if (!fullPath.startsWith(normalize(publicDir))) {
-    auditLog('path_escape_blocked', { path: filePath, level: 'warn' });
+  // Belt-and-suspenders: resolved path must be inside publicDir
+  if (!fullPath.startsWith(publicDir + sep) && fullPath !== publicDir) {
+    auditLog('path_escape_blocked', { path: filePath, resolved: fullPath, level: 'warn' });
     res.statusCode = 403;
     res.setHeader('Content-Type', 'text/plain');
     return res.end('Forbidden');
   }
 
-  const ext = extname(filePath);
+  const ext = extname(fullPath);
 
   try {
-    const content = await readFile(fullPath);
+    let content = await readFile(fullPath);
+
+    // Inject auth token into HTML via <meta> tag (CSP-safe, no inline script)
+    if (ext === '.html') {
+      const token = getAuthToken();
+      if (token) {
+        let html = content.toString('utf-8');
+        html = html.replace(
+          '<meta charset="UTF-8">',
+          `<meta charset="UTF-8">\n  <meta name="ag-auth-token" content="${token}">`
+        );
+        res.setHeader('Content-Type', MIME[ext]);
+        return res.end(html);
+      }
+    }
+
     res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream');
     res.end(content);
   } catch {
@@ -443,12 +637,21 @@ const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Methods', allowedMethods.join(', '));
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.statusCode = 204;
     return res.end();
   }
 
+  // Authentication check for API endpoints (except health)
   if (req.url.startsWith('/api/')) {
+    const apiPath = new URL(req.url, `http://localhost:${PORT}`).pathname;
+    if (apiPath !== '/api/health' && isAuthRequired() && !validateAuth(req)) {
+      res.statusCode = 401;
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('WWW-Authenticate', 'Bearer');
+      auditLog('auth_rejected', { path: apiPath, ip: req.socket?.remoteAddress, level: 'warn' });
+      return res.end(JSON.stringify({ error: 'Authentication required' }));
+    }
     return handleAPI(req, res);
   }
   return serveStatic(req, res);
@@ -509,11 +712,11 @@ async function main() {
   auditLog('server_start', { version: VERSION, port: PORT });
 
   // Load model pricing
-  console.log('  [1/4] Loading LLM pricing data...');
+  console.log('  [1/7] Loading LLM pricing data...');
   await loadPricing();
 
   // Discover providers
-  console.log('  [2/4] Discovering AI coding tools...');
+  console.log('  [2/7] Discovering AI coding tools...');
   const active = await getActiveProviders();
   if (active.length === 0) {
     console.log('  ⚠  No AI coding tools detected on this machine.');
@@ -525,7 +728,7 @@ async function main() {
   }
 
   // Start file watchers
-  console.log('\n  [3/4] Starting real-time file watchers...');
+  console.log('\n  [3/7] Starting real-time file watchers...');
   try {
     const watchPaths = await getProviderWatchPaths();
     for (const { provider, paths } of watchPaths) {
@@ -550,17 +753,98 @@ async function main() {
     });
   });
 
+  // Initialize budget, webhooks, currency
+  console.log('\n  [4/7] Loading budget configuration...');
+  await loadBudgetConfig();
+  const budgetCfg = getBudgetConfig();
+  if (budgetCfg.daily || budgetCfg.weekly || budgetCfg.monthly) {
+    console.log(`  ✓  Budget thresholds active (daily: $${budgetCfg.daily || '∞'}, weekly: $${budgetCfg.weekly || '∞'}, monthly: $${budgetCfg.monthly || '∞'})`);
+  } else {
+    console.log('  ○  No budget thresholds set. Configure at /api/budget or ~/.ag-code-token/budgets.json');
+  }
+
+  console.log('\n  [5/7] Loading webhook configuration...');
+  await loadWebhookConfig();
+  const webhookCfg = getWebhookConfig();
+  const enabledHooks = webhookCfg.webhooks?.filter(w => w.enabled) || [];
+  if (enabledHooks.length > 0) {
+    console.log(`  ✓  ${enabledHooks.length} webhook(s) active: ${enabledHooks.map(w => w.type).join(', ')}`);
+  } else {
+    console.log('  ○  No webhooks configured. See /api/webhooks');
+  }
+
+  // Wire budget alerts → webhooks
+  onBudgetAlert(async (alerts) => {
+    await sendWebhookNotification('budget_alert', alerts);
+    // Broadcast to SSE clients
+    sseManager.broadcast('budget-alert', { alerts });
+  });
+
+  console.log('\n  [6/7] Loading currency configuration...');
+  await loadCurrencyConfig();
+  console.log(`  ✓  Currency: ${getCurrentCurrency()}`);
+
+  // Wire file watcher → budget checking
+  fileWatcher.on('change', async () => {
+    try {
+      const summaries = {};
+      for (const p of ['today', 'week', 'month']) {
+        summaries[p] = await getAggregateSummary(p, 'all');
+      }
+      const spending = computeSpending(summaries);
+      const alerts = checkBudgets(spending);
+      if (alerts.length > 0) {
+        await processAlerts(alerts);
+      }
+    } catch { /* non-critical */ }
+  });
+
+  // Daily summary webhook (fires at midnight)
+  scheduleDailySummary();
+
   // Start server
-  console.log(`\n  [4/4] Starting dashboard server...`);
-  server.listen(PORT, () => {
-    console.log(`\n  🔥 Dashboard:  http://localhost:${PORT}`);
-    console.log(`  📊 API:        http://localhost:${PORT}/api/summary`);
-    console.log(`  🔌 Providers:  http://localhost:${PORT}/api/providers`);
-    console.log(`  📡 Events:     http://localhost:${PORT}/api/events`);
-    console.log(`  🔒 Security:   Rate limiting (${120}/min), CSP, CORS\n`);
-    auditLog('server_ready', { port: PORT });
+  console.log(`\n  [7/7] Starting dashboard server...`);
+  server.listen(PORT, HOST, () => {
+    console.log(`\n  🔥 Dashboard:  http://${HOST}:${PORT}`);
+    console.log(`  📊 API:        http://${HOST}:${PORT}/api/summary`);
+    console.log(`  📈 Trends:     http://${HOST}:${PORT}/api/trends`);
+    console.log(`  🔌 Providers:  http://${HOST}:${PORT}/api/providers`);
+    console.log(`  📡 Events:     http://${HOST}:${PORT}/api/events`);
+    console.log(`  💰 Budget:     http://${HOST}:${PORT}/api/budget`);
+    console.log(`  🔗 Webhooks:   http://${HOST}:${PORT}/api/webhooks`);
+    console.log(`  💱 Currency:   http://${HOST}:${PORT}/api/currency`);
+    console.log(`  🔒 Security:   Rate limiting (${120}/min), CSP, Auth, localhost-only`);
+    if (isAuthRequired()) {
+      const token = getAuthToken();
+      console.log(`  🔑 Auth Token: ${token?.slice(0, 8)}...${token?.slice(-4)} (full token in ~/.ag-code-token/auth-secret)`);
+    } else {
+      console.log(`  🔑 Auth:       Not enforced (localhost binding). Set AG_TOKEN_AUTH=required to enable.`);
+    }
+    console.log('');
+    auditLog('server_ready', { port: PORT, host: HOST, authRequired: isAuthRequired(), features: ['trends', 'budget', 'webhooks', 'currency'] });
   });
 }
+
+// ─── Daily Summary Scheduler ──────────────────────────────────────────────────
+function scheduleDailySummary() {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 5, 0); // 00:05 tomorrow
+  const ms = next.getTime() - now.getTime();
+
+  setTimeout(async () => {
+    try {
+      const summary = await getAggregateSummary('today', 'all');
+      await sendWebhookNotification('daily_summary', summary);
+      auditLog('daily_summary_sent', { cost: summary.totalCostUSD });
+    } catch (err) {
+      auditLog('daily_summary_error', { error: err.message, level: 'error' });
+    }
+    // Reschedule
+    scheduleDailySummary();
+  }, ms).unref();
+}
+
+
 
 main().catch(err => {
   auditLog('fatal_startup', { error: err.message, level: 'error' });
