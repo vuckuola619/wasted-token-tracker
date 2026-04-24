@@ -170,6 +170,12 @@ function renderBudgetCard() {
     </div>`;
   }).join('');
 
+  return `<div class="card">
+    <div class="card-hd"><h3>${I.shield} Budget</h3></div>
+    ${rows}
+  </div>`;
+}
+
 // ─── Render ─────────────────────────────────────────────────────────────────────
 function render() {
   const app = document.getElementById('app');
@@ -367,13 +373,6 @@ function render() {
       }
     });
   }
-
-  if (chartTimer) clearTimeout(chartTimer);
-  chartTimer = setTimeout(() => {
-    try { renderCharts(d.timeseries); } catch (e) { /* chart render error */ }
-    try { renderTrendChart(); } catch (e) { /* trend chart error */ }
-  }, 250);
-}
 
   if (chartTimer) clearTimeout(chartTimer);
   chartTimer = setTimeout(() => {

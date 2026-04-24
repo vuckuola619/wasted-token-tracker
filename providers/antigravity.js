@@ -118,27 +118,109 @@ export function invalidateModelHintsCache() {
   _hintsCacheTime = 0;
 }
 
+// ─── Model name normalizer (maps display names → internal IDs) ─────────────────
+const MODEL_NAME_MAP = {
+  // Gemini 3.x
+  'gemini 3.1 pro': 'gemini-3.1-pro',
+  'gemini 3.1 pro (high)': 'gemini-3.1-pro',
+  'gemini 3.1 pro (low)': 'gemini-3.1-pro',
+  'gemini 3 flash': 'gemini-3-flash',
+  'gemini 3 pro': 'gemini-3.1-pro',
+  // Gemini 2.x
+  'gemini 2.5 pro': 'gemini-2.5-pro',
+  'gemini 2.5 flash': 'gemini-2.5-flash',
+  'gemini 2.0 flash': 'gemini-2.0-flash',
+  // Claude
+  'claude sonnet 4.6': 'claude-sonnet-4-6',
+  'claude sonnet 4.6 (thinking)': 'claude-sonnet-4-6',
+  'claude sonnet 4.5': 'claude-sonnet-4-5',
+  'claude opus 4.6': 'claude-opus-4-6',
+  'claude opus 4.6 (thinking)': 'claude-opus-4-6',
+  'claude opus 4.5': 'claude-opus-4-5',
+  // GPT-OSS
+  'gpt-oss 120b': 'gpt-oss-120b',
+  'gpt-oss 120b (medium)': 'gpt-oss-120b',
+};
+
+function normalizeModelName(raw) {
+  if (!raw) return null;
+  const lower = raw.toLowerCase().trim();
+  if (MODEL_NAME_MAP[lower]) return MODEL_NAME_MAP[lower];
+  // Try partial match
+  for (const [key, val] of Object.entries(MODEL_NAME_MAP)) {
+    if (lower.includes(key) || key.includes(lower)) return val;
+  }
+  return null;
+}
+
+/**
+ * Auto-detect model from overview.txt JSONL log.
+ * Reads USER_SETTINGS_CHANGE entries to find the last model selection.
+ * Returns null if no model change found (caller should fall back to default).
+ */
+async function detectModelFromOverview(convId) {
+  const overviewPath = join(getBrainDir(), convId, '.system_generated', 'logs', 'overview.txt');
+  let raw;
+  try {
+    raw = await readFile(overviewPath, 'utf-8');
+  } catch {
+    return null; // No overview.txt — brain dir may not have logs
+  }
+
+  // Parse JSONL and find the LAST model selection in USER_SETTINGS_CHANGE blocks
+  let detectedModel = null;
+  const lines = raw.split(/\r?\n/);
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    try {
+      const entry = JSON.parse(line);
+      if (entry.type === 'USER_INPUT' && typeof entry.content === 'string') {
+        // Antigravity embeds USER_SETTINGS_CHANGE in the content field as a tag block.
+        // Pattern: `Model Selection` from X to Y. No need to comment...
+        // We match "from X to Y" stopping at ". No" or end of model name.
+        if (entry.content.includes('Model Selection')) {
+          // Antigravity format: `Model Selection` from X to Y. No need to comment...
+          const match = entry.content.match(
+            /`Model Selection` from .+? to (.+?)\. (?:No|If)/i
+          );
+          if (match) {
+            const normalized = normalizeModelName(match[1].trim());
+            if (normalized) detectedModel = normalized;
+          }
+        }
+      }
+    } catch { /* malformed line — skip */ }
+  }
+
+  return detectedModel;
+}
+
 /**
  * Detect which model was used for a conversation.
  * 
  * Priority:
  *   1. Per-conversation override in model_hints.json
- *   2. Default model from model_hints.json
- *   3. Hardcoded fallback: gemini-3.1-pro
+ *   2. Auto-detected from overview.txt USER_SETTINGS_CHANGE log (new!)
+ *   3. Default model from model_hints.json
+ *   4. Hardcoded fallback: gemini-3.1-pro
  */
 async function detectModel(convId) {
   const hints = await loadModelHints();
 
-  // Per-conversation override (exact match or prefix match)
+  // 1. Per-conversation override (exact match or prefix match)
   if (hints.conversations) {
     if (hints.conversations[convId]) return hints.conversations[convId];
-    // Support prefix matching (first 8 chars)
     const prefix = convId.slice(0, 8);
     for (const [key, model] of Object.entries(hints.conversations)) {
       if (key.startsWith(prefix) || convId.startsWith(key)) return model;
     }
   }
 
+  // 2. Auto-detect from overview.txt log
+  const autoDetected = await detectModelFromOverview(convId);
+  if (autoDetected) return autoDetected;
+
+  // 3. Default from hints file, or hardcoded fallback
   return hints.defaultModel || 'gemini-3.1-pro';
 }
 
