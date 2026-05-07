@@ -55,7 +55,8 @@
     #panel {
       position: fixed;
       bottom: 44px; left: 0; right: 0;
-      height: 202px;
+      height: auto;
+      max-height: 320px;
       background: rgba(14, 14, 22, 0.96);
       border: 1px solid rgba(255,255,255,0.10);
       border-radius: 10px;
@@ -103,7 +104,7 @@
   <div class="row"><span class="lbl">Output Tokens</span> <span class="val v-out"  id="p-out">—</span></div>
   <div class="row"><span class="lbl">API Calls</span>     <span class="val"        id="p-calls">—</span></div>
   <div class="row"><span class="lbl">Claude Window</span> <span class="val v-win"  id="p-win">—</span></div>
-  <div class="row"><span class="lbl">Providers</span>     <span class="val"        id="p-prov">—</span></div>
+  <div id="p-models-section"></div>
   <div class="updated" id="p-ts">—</div>
 </div>
 
@@ -161,8 +162,21 @@ async function refresh() {
     document.getElementById('p-win').textContent   = w?.isActive
       ? `resets in ${w.resetInFormatted} · ${fmt.tok(w.tokensUsed)} tok`
       : w ? 'expired' : 'no claude data';
-    document.getElementById('p-prov').textContent  = s.providers?.map(p=>p.displayName).join(', ')||'—';
-    document.getElementById('p-ts').textContent    = 'updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    // Model context window rows
+    const modelsEl = document.getElementById('p-models-section');
+    if (s.models?.length) {
+      modelsEl.innerHTML = s.models.slice(0, 4).map(m => {
+        const ctx = m.contextWindow;
+        const used = (m.inputTokens || 0) + (m.outputTokens || 0);
+        const pct = ctx ? Math.min(Math.round(used / ctx * 100), 100) : null;
+        const ctxLabel = ctx ? (ctx >= 1_000_000 ? (ctx/1_000_000).toFixed(ctx%1_000_000===0?0:1)+'M' : Math.round(ctx/1000)+'K') + ' ctx' : '? ctx';
+        const pctLabel = pct !== null ? ` · ${pct}%` : '';
+        return `<div class="row"><span class="lbl">${m.name}</span><span class="val" style="color:#b0bec5;font-size:11px">${ctxLabel}${pctLabel}</span></div>`;
+      }).join('');
+    } else {
+      modelsEl.innerHTML = '';
+    }
+    document.getElementById('p-ts').textContent = 'updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   } catch {
     dot.className = 'dot off';
     document.getElementById('s-cost').textContent = 'offline';

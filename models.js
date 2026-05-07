@@ -201,6 +201,76 @@ const SHORT_MODEL_NAMES = {
 
 let pricingCache = null;
 
+// ─── Context Window Limits ─────────────────────────────────────────────────────
+// Max input tokens per model family. Used for "% of context used" display.
+const CONTEXT_WINDOWS = {
+  // Anthropic — all Claude 3.x/4.x have 200K input
+  'claude-opus-4':       200_000,
+  'claude-sonnet-4':     200_000,
+  'claude-haiku-4':      200_000,
+  'claude-3-5-sonnet':   200_000,
+  'claude-3-5-haiku':    200_000,
+  'claude-3-opus':       200_000,
+  'claude-3-sonnet':     200_000,
+  'claude-3-haiku':      200_000,
+  // OpenAI
+  'gpt-5':               128_000,
+  'gpt-4o':              128_000,
+  'gpt-4-turbo':         128_000,
+  'gpt-4':               128_000,
+  'gpt-3.5-turbo':        16_385,
+  'o4-mini':             200_000,
+  'o3':                  200_000,
+  'o1':                  200_000,
+  'gpt-oss-120b':        128_000,
+  // Google Gemini
+  'gemini-3.1-pro':    1_000_000,
+  'gemini-3-flash':    1_000_000,
+  'gemini-2.5-pro':    1_048_576,
+  'gemini-2.5-flash':  1_048_576,
+  'gemini-2.0-flash':  1_048_576,
+  'gemini-1.5-pro':    2_097_152,
+  'gemini-1.5-flash':  1_048_576,
+  // DeepSeek
+  'deepseek-v3':         128_000,
+  'deepseek-r1':         128_000,
+  'deepseek-coder':      128_000,
+  // Meta Llama
+  'llama-4-scout':    10_485_760,
+  'llama-4-maverick':  1_048_576,
+  'llama-3.3-70b':       128_000,
+  'llama-3.1-405b':      128_000,
+  // Mistral
+  'mistral-large':       131_072,
+  'codestral':           262_144,
+  'mistral-small':       131_072,
+  // xAI
+  'grok-3':              131_072,
+  'grok-2':              131_072,
+  // Qwen
+  'qwen2.5-coder-32b':   131_072,
+  'qwen2.5-72b':         131_072,
+  // Cohere
+  'command-r-plus':      128_000,
+  'command-r':           128_000,
+};
+
+/**
+ * Get context window (max input tokens) for a model.
+ * Returns null if unknown.
+ */
+export function getContextWindow(model) {
+  if (!model) return null;
+  const canonical = model.replace(/@.*$/, '').replace(/-\d{8}$/, '').toLowerCase();
+  // Exact match
+  if (CONTEXT_WINDOWS[canonical]) return CONTEXT_WINDOWS[canonical];
+  // Prefix match (e.g. "claude-opus-4-6" matches "claude-opus-4")
+  for (const [key, size] of Object.entries(CONTEXT_WINDOWS)) {
+    if (canonical.startsWith(key)) return size;
+  }
+  return null;
+}
+
 function getCacheDir() {
   return join(homedir(), '.cache', 'wasted-token-tracker');
 }

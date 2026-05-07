@@ -8,9 +8,9 @@ function createWindow() {
 
   win = new BrowserWindow({
     width: 320,
-    height: 250,
+    height: 380,
     x: width - 328,
-    y: height - 250,
+    y: height - 380,
     frame: false,
     transparent: true,
     alwaysOnTop: true,

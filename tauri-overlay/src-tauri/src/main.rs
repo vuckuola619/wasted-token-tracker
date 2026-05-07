@@ -10,7 +10,7 @@ fn position_window_bottom_right(window: &Window) {
         let size = monitor.size();
         let scale = monitor.scale_factor();
         let win_w = 320.0_f64;
-        let win_h = 250.0_f64;
+        let win_h = 380.0_f64;
         // 48px = typical Windows taskbar height
         let taskbar_h = 48.0_f64;
         let margin = 8.0_f64;

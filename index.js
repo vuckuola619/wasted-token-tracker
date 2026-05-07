@@ -13,7 +13,7 @@
  */
 
 // ─── Core Exports ──────────────────────────────────────────────────────────────
-export { loadPricing, getModelCosts, calculateCost, getShortModelName } from './models.js';
+export { loadPricing, getModelCosts, calculateCost, getShortModelName, getContextWindow } from './models.js';
 export { parseAllSessions, getAggregateSummary, getDateRange, invalidateCache } from './parser.js';
 export { getActiveProviders, getProviderNames, discoverAllSessions } from './providers/index.js';
 

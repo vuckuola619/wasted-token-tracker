@@ -31,7 +31,7 @@ import http from 'http';
 import { readFile } from 'fs/promises';
 import { join, dirname, extname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
-import { loadPricing } from './models.js';
+import { loadPricing, getContextWindow } from './models.js';
 import { getAggregateSummary, parseAllSessions, getDateRange, invalidateCache } from './parser.js';
 import { getActiveProviders, getProviderNames, getProviderWatchPaths } from './providers/index.js';
 import { getModelHintsPath, saveModelHints, invalidateModelHintsCache } from './providers/antigravity.js';
@@ -164,6 +164,13 @@ async function handleAPI(req, res) {
         summary.projects = summary.projects.map(p => ({
           ...p,
           project: redactProjectName(p.project),
+        }));
+      }
+      // Attach context window limit to each model entry (use raw modelId for accurate lookup)
+      if (summary.models) {
+        summary.models = summary.models.map(m => ({
+          ...m,
+          contextWindow: getContextWindow(m.model) ?? getContextWindow(m.name),
         }));
       }
       return json(res, summary);

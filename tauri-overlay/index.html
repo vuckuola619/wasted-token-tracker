@@ -9,7 +9,7 @@
 
     html, body {
       width: 320px;
-      height: 250px;
+      height: 380px;
       background: transparent;
       overflow: hidden;
       font-family: 'Consolas', 'Cascadia Code', 'Segoe UI Mono', monospace;
@@ -168,10 +168,7 @@
       <span class="panel-label">Claude Window</span>
       <span class="panel-val val-win" id="p-win">—</span>
     </div>
-    <div class="panel-row">
-      <span class="panel-label">Active Providers</span>
-      <span class="panel-val" id="p-providers">—</span>
-    </div>
+    <div id="p-model-limits"></div>
     <div class="panel-footer" id="p-updated">—</div>
   </div>
 
@@ -187,6 +184,7 @@
 
   <script>
     'use strict';
+    function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
     const BASE = 'http://127.0.0.1:3777';
     let expanded = false;
@@ -246,7 +244,20 @@
         }
 
         const provs = summary.providers?.map(p => p.displayName).join(', ') || '—';
-        document.getElementById('p-providers').textContent = provs;
+        // Model context window rows
+        const limEl = document.getElementById('p-model-limits');
+        if (summary.models?.length) {
+          limEl.innerHTML = summary.models.slice(0, 4).map(m => {
+            const ctx = m.contextWindow;
+            const used = (m.inputTokens || 0) + (m.outputTokens || 0);
+            const pct = ctx ? Math.min(Math.round(used / ctx * 100), 100) : null;
+            const ctxLabel = ctx
+              ? (ctx >= 1_000_000 ? (ctx/1_000_000).toFixed(ctx%1_000_000===0?0:1)+'M' : Math.round(ctx/1000)+'K') + ' ctx'
+              : '? ctx';
+            const pctLabel = pct !== null ? ` · ${pct}% used` : '';
+            return `<div class="panel-row"><span class="panel-label">${esc(m.name)}</span><span class="panel-val" style="color:#b0bec5;font-size:11px">${ctxLabel}${pctLabel}</span></div>`;
+          }).join('');
+        }
 
         const now = new Date();
         document.getElementById('p-updated').textContent =

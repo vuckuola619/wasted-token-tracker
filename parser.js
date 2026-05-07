@@ -152,7 +152,7 @@ export async function parseAllSessions(dateRange, providerFilter) {
         // Model breakdown
         const modelName = getShortModelName(call.model);
         if (!proj.modelBreakdown[modelName]) {
-          proj.modelBreakdown[modelName] = { calls: 0, costUSD: 0, inputTokens: 0, outputTokens: 0 };
+          proj.modelBreakdown[modelName] = { calls: 0, costUSD: 0, inputTokens: 0, outputTokens: 0, modelId: call.model };
         }
         proj.modelBreakdown[modelName].calls++;
         proj.modelBreakdown[modelName].costUSD += call.costUSD;
@@ -228,7 +228,7 @@ export async function getAggregateSummary(period = 'week', providerFilter = 'all
     }
 
     for (const [model, data] of Object.entries(proj.modelBreakdown)) {
-      if (!modelTotals[model]) modelTotals[model] = { calls: 0, costUSD: 0, inputTokens: 0, outputTokens: 0 };
+      if (!modelTotals[model]) modelTotals[model] = { calls: 0, costUSD: 0, inputTokens: 0, outputTokens: 0, modelId: data.modelId };
       modelTotals[model].calls += data.calls;
       modelTotals[model].costUSD += data.costUSD;
       modelTotals[model].inputTokens += data.inputTokens;
@@ -258,7 +258,7 @@ export async function getAggregateSummary(period = 'week', providerFilter = 'all
     totalApiCalls: totalCalls,
     projectCount: projects.length,
     timeseries: Object.entries(dailyTotals).sort((a,b) => a[0].localeCompare(b[0])),
-    models: Object.entries(modelTotals).sort(([, a], [, b]) => b.costUSD - a.costUSD).map(([name, d]) => ({ name, ...d })),
+    models: Object.entries(modelTotals).sort(([, a], [, b]) => b.costUSD - a.costUSD).map(([name, d]) => ({ name, model: d.modelId, ...d })),
     tools: Object.entries(toolTotals).sort(([, a], [, b]) => b.calls - a.calls).map(([name, d]) => ({ name, ...d })),
     providers: Object.entries(providerTotals).sort(([, a], [, b]) => b.costUSD - a.costUSD).map(([name, d]) => ({ name, ...d })),
     projects: projects.map(p => ({
