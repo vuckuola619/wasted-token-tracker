@@ -34,6 +34,7 @@ let budgetData = null;
 let trendsData = null;
 let currencyData = null;
 let trendGranularity = 'daily';
+let billingWin = null;
 let renderId = 0;
 let chartTimer = null;
 
@@ -72,7 +73,15 @@ const I = {
 };
 
 // ─── Formatting ─────────────────────────────────────────────────────────────────
-function fmtCost(v) {
+function fmtCost(usdVal) {
+  const v = usdVal || 0;
+  if (currencyData && currentCurrency !== 'USD') {
+    const c = currencyData.currencies.find(x => x.code === currentCurrency);
+    if (c) {
+      const local = v * c.rate;
+      return c.symbol + local.toLocaleString(c.locale, { minimumFractionDigits: c.decimals, maximumFractionDigits: c.decimals });
+    }
+  }
   if (!v) return '$0.00';
   if (v < 0.01) return '$' + v.toFixed(4);
   if (v < 1) return '$' + v.toFixed(3);
@@ -117,6 +126,7 @@ async function loadSummary() {
     fetchJSON(`/api/summary?period=${currentPeriod}&provider=${currentProvider}`),
     loadTrends(),
     loadBudget(),
+    fetchJSON('/api/billing-window').then(d => { billingWin = d; }).catch(() => {}),
   ]);
   summaryData = summary;
   render();
@@ -200,7 +210,7 @@ function render() {
       <div class="card">
         <div class="metric-label">${I.coins} Total Tokens</div>
         <div class="metric-value">${fmtTok(totalTok)}</div>
-        <div class="metric-sub">${fmtTok(d.totalInputTokens)} in · ${fmtTok(d.totalOutputTokens)} out</div>
+        <div class="metric-sub">${fmtTok(d.totalInputTokens)} in · ${fmtTok(d.totalOutputTokens)} out · ${fmtTok(d.totalCacheReadTokens + d.totalCacheWriteTokens)} cache${d.totalReasoningTokens > 0 ? ' · ' + fmtTok(d.totalReasoningTokens) + ' reasoning' : ''}</div>
       </div>
       <div class="card">
         <div class="metric-label" style="color: hsl(var(--magenta, 290 80% 60%))">${I.zap} Tokscale Rank</div>
@@ -211,6 +221,11 @@ function render() {
         <div class="metric-label">${I.zap} API Calls</div>
         <div class="metric-value">${fmtNum(d.totalApiCalls)}</div>
         <div class="metric-sub">across ${d.projectCount} project${d.projectCount !== 1 ? 's' : ''}</div>
+      </div>
+      <div class="card">
+        <div class="metric-label">${I.zap} Claude Window</div>
+        <div class="metric-value" style="font-size:20px">${esc(billingWin?.resetInFormatted || 'No data')}</div>
+        <div class="metric-sub">${billingWin?.isActive ? `${fmtTok(billingWin.tokensUsed)} tok · ${fmtCost(billingWin.costUSD)}` : 'Window inactive'}</div>
       </div>
       <div class="card">
         <div class="metric-label">${I.monitor} Active IDEs</div>

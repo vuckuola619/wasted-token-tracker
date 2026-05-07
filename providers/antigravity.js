@@ -315,7 +315,9 @@ export const antigravity = {
         if (pbSize < 100) return; // Skip empty/tiny conversations
 
         const model = await detectModel(convId);
-        const timestamp = pbStat.mtime.toISOString();
+        // Use birthtime (conversation creation) for accurate date filtering.
+        // mtime updates on every write — all active sessions would appear as "today".
+        const timestamp = (pbStat.birthtime || pbStat.mtime).toISOString();
 
         // ─── Estimate tokens from protobuf size ───
         const totalTokens = Math.round(pbSize / BYTES_PER_TOKEN_ESTIMATE);
@@ -347,7 +349,7 @@ export const antigravity = {
           if (artifacts.length > 0) tools.push('Edit');
         } catch {}
 
-        const dedupKey = `antigravity:${convId}:${pbSize}`;
+        const dedupKey = `antigravity:${convId}`;
         if (seenKeys.has(dedupKey)) return;
         seenKeys.add(dedupKey);
 

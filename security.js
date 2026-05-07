@@ -285,6 +285,10 @@ export function validateQueryParams(url) {
     params.format = 'json';
   }
 
+  // Redact mode (privacy)
+  const redact = url.searchParams.get('redact');
+  params.redact = redact === '1' || redact === 'true';
+
   return params;
 }
 
@@ -427,6 +431,14 @@ export function validateTimestamp(ts) {
 }
 
 // ─── CSV Injection Protection ──────────────────────────────────────────────────
+
+/**
+ * Redact a project name for privacy mode — keeps first 3 chars, masks rest.
+ */
+export function redactProjectName(name) {
+  if (!name || name.length <= 3) return '***';
+  return name.slice(0, 3) + '*'.repeat(Math.min(name.length - 3, 5));
+}
 
 /**
  * Escape CSV values to prevent formula injection.

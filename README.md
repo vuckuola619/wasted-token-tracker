@@ -9,13 +9,13 @@
 </p>
 
 <p align="center">
-  Track costs across Claude Code, Codex, Cursor, Windsurf, Cline, Copilot, Antigravity, Gemini CLI, Roo Code, and 13 more
+  Track costs across Claude Code, Codex, Cursor, Windsurf, Cline, Copilot, Antigravity, Gemini CLI, Roo Code, Zed, and 13 more
   — from a single dashboard. Zero dependencies. Fully local.
 </p>
 
 <p align="center">
   <a href="#quick-start"><img src="https://img.shields.io/badge/setup-30_seconds-2563eb?style=for-the-badge" alt="30s Setup" /></a>
-  <a href="#supported-tools"><img src="https://img.shields.io/badge/tools-22_supported-16a34a?style=for-the-badge" alt="22 Tools" /></a>
+  <a href="#supported-tools"><img src="https://img.shields.io/badge/tools-23_supported-16a34a?style=for-the-badge" alt="23 Tools" /></a>
   <a href="#supported-models"><img src="https://img.shields.io/badge/models-50+-7c3aed?style=for-the-badge" alt="50+ Models" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-f59e0b?style=for-the-badge" alt="MIT License" /></a>
 </p>
@@ -56,7 +56,7 @@ Open [http://localhost:3777](http://localhost:3777) in your browser. The server 
 ## Features
 
 ### Cross-IDE Observability
-Monitor token consumption across **22 AI coding tools** from a single interface. Identify which tool, model, or project is driving your costs.
+Monitor token consumption across **23 AI coding tools** from a single interface. Identify which tool, model, or project is driving your costs.
 
 ### Real-Time Cost Calculation
 Automatic pricing using live data from [LiteLLM](https://github.com/BerriAI/litellm) (cached 24h) with hardcoded fallbacks covering 50+ models. Supports input, output, cache read, cache write, reasoning, and web search token categories.
@@ -76,8 +76,25 @@ Analyze usage patterns and receive actionable optimization recommendations:
 - **Context window alerts** — warns about oversized prompts
 - **Config recommendations** — `.cursorrules`, `.clinerules`, `.gitignore` tuning
 
+### Claude 5-Hour Billing Window
+Track the current Claude billing window reset time from the dashboard. The `GET /api/billing-window` endpoint computes active window start/end, tokens used, cost, and remaining time — plus the last 5 previous windows. The dashboard shows a live "Claude Window" metric card with reset countdown.
+
+### Always-On-Top Overlay
+A minimal Electron-based desktop overlay (`overlay/`) renders a 320×40px always-on-top strip at the bottom-right corner:
+```
+⚡ $28.69 · 5.2M↑ 1.1M↓ · ⏱ 2h 39m
+```
+Click the strip to expand a full detail panel (cost, tokens, API calls, Claude window, active providers). Tray icon with show/hide and dashboard launch. No Rust or additional build tools required — runs on Node.js.
+
+```bash
+cd overlay
+npm install
+npm start
+```
+
 ### Dashboard Panels
 - **Hero Stats** — total cost, token count, API calls, active IDEs, Tokscale rank
+- **Claude Window** — current 5-hour billing window reset time + tokens used
 - **Model Breakdown** — cost and usage per LLM (Opus 4.6, GPT-5, Gemini Pro, etc.)
 - **Provider Breakdown** — side-by-side comparison across all tools
 - **Token Breakdown** — input, output, cache read, cache write, reasoning tokens
@@ -166,8 +183,9 @@ console.log(`Cost: $${today.totalCostUSD.toFixed(2)}`);
 |------|------------|
 | **[OpenCode](https://github.com/opencode-ai/opencode)** | SQLite database |
 | **[Gemini CLI](https://github.com/google-gemini/gemini-cli)** | `~/.gemini/tmp/` |
-| **[AmpCode](https://ampcode.com/)** | `~/.local/share/amp/` |
+| **[Amp](https://ampcode.com/)** | `%APPDATA%\Amp\threads\` |
 | **[Roo Code](https://roocode.com/)** | VS Code `globalStorage` |
+| **[Zed](https://zed.dev/)** | `%APPDATA%\Zed\conversations\` |
 | **[Kilo Code](https://kilocode.ai/)** | VS Code `globalStorage` |
 | **[Factory Droid](https://factory.ai/)** | `~/.factory/sessions/` |
 | **[Pi Agent](https://github.com/pi-agi)** | `~/.pi/agent/sessions/` |
@@ -208,11 +226,13 @@ wasted-token-tracker/
 ├── server.js                # HTTP server, API routing, SSE, auth
 ├── models.js                # LLM pricing engine (LiteLLM + 56 hardcoded fallbacks)
 ├── parser.js                # Discovery -> parse -> deduplicate -> aggregate pipeline
+├── billing-window.js        # Claude 5-hour billing window tracker
 ├── security.js              # Rate limiting, CSP, auth, HMAC audit, input validation
 ├── watcher.js               # Real-time filesystem watchers (SSE push)
 ├── budget.js                # Budget thresholds, breach detection, notifications
 ├── webhooks.js              # Slack/Discord/Telegram/HTTP webhook dispatch
 ├── currency.js              # Multi-currency conversion (ECB API + offline fallback)
+├── mcp.js                   # MCP stdio server (4 tools for AI agent integration)
 ├── index.js                 # npm programmatic API exports
 ├── cli.js                   # Terminal interface (budget, webhooks, currency, export)
 ├── sql_scanner.js           # Zero-dependency SQLite heuristic scanner
@@ -220,8 +240,12 @@ wasted-token-tracker/
 ├── docker-compose.yml       # Production container orchestration
 ├── tray/
 │   └── launcher.js          # System tray background runner
+├── overlay/
+│   ├── main.js              # Electron always-on-top overlay app
+│   ├── index.html           # Overlay UI (strip + detail panel)
+│   └── package.json         # Electron dependency only
 ├── providers/
-│   ├── index.js             # Provider registry and discovery
+│   ├── index.js             # Provider registry and discovery (23 providers)
 │   ├── types.js             # JSDoc interface definitions
 │   ├── antigravity.js       # Google DeepMind Antigravity
 │   ├── claude.js            # Anthropic Claude Code
@@ -232,7 +256,11 @@ wasted-token-tracker/
 │   ├── copilot.js           # GitHub Copilot
 │   ├── continuedev.js       # Continue.dev
 │   ├── aider.js             # Aider CLI
-│   ├── extended.js          # 10 additional JSON/JSONL providers
+│   ├── geminicli.js         # Google Gemini CLI
+│   ├── amp.js               # Amp (formerly Codegen)
+│   ├── roocode.js           # Roo Code VS Code extension
+│   ├── zed.js               # Zed Editor
+│   ├── extended.js          # 9 additional JSON/JSONL providers
 │   └── sqlite_providers.js  # SQLite-backed providers (OpenCode, Hermes)
 ├── public/
 │   ├── index.html           # Dashboard SPA shell
@@ -247,7 +275,7 @@ wasted-token-tracker/
                 │
                 ▼
 ┌──────────────────────────┐
-│  Provider Plugins (22)   │  Each plugin knows where to find its tool's
+│  Provider Plugins (23)   │  Each plugin knows where to find its tool's
 │  providers/*.js          │  data and how to parse it
 └───────────┬──────────────┘
             │
@@ -290,6 +318,9 @@ All endpoints return JSON. CORS is enabled by default.
 | `/api/webhooks` | GET/PUT | Webhook configurations (Slack, Discord, Telegram, HTTP) |
 | `/api/webhooks/test` | POST | Test a webhook configuration |
 | `/api/currency` | GET/PUT | Currency preference and exchange rates |
+| `/api/billing-window` | GET | Claude 5-hour billing window: reset time, tokens, cost, history |
+| `/api/wrapped` | GET | All-time stats + Tokscale rank |
+| `/api/model-hints` | GET/PUT | Antigravity model detection overrides |
 | `/api/events` | SSE | Server-Sent Events stream for real-time updates |
 | `/api/cache` | DELETE | Purge all cached data (GDPR right to erasure) |
 

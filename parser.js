@@ -38,7 +38,8 @@ export function getDateRange(period) {
   switch (period) {
     case 'today': {
       const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      return { range: { start, end }, label: `Today (${start.toISOString().slice(0, 10)})` };
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      return { range: { start, end }, label: `Today (${dateStr})` };
     }
     case 'week': {
       const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);

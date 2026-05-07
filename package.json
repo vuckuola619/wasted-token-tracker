@@ -1,6 +1,6 @@
 {
   "name": "wasted-token-tracker",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Universal AI coding token usage monitor — track costs across Claude Code, Codex, Cursor, Windsurf, Cline, Copilot, Continue.dev, Aider, and Antigravity from a single dashboard",
   "type": "module",
   "main": "index.js",
@@ -11,10 +11,12 @@
     "./parser": "./parser.js",
     "./budget": "./budget.js",
     "./webhooks": "./webhooks.js",
-    "./currency": "./currency.js"
+    "./currency": "./currency.js",
+    "./mcp": "./mcp.js"
   },
   "bin": {
-    "wasted-token": "./cli.js"
+    "wasted-token": "./cli.js",
+    "wasted-token-mcp": "./mcp.js"
   },
   "scripts": {
     "start": "node server.js",
@@ -59,6 +61,8 @@
     "index.js",
     "server.js",
     "cli.js",
+    "mcp.js",
+    "billing-window.js",
     "models.js",
     "parser.js",
     "security.js",

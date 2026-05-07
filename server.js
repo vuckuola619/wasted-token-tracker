@@ -41,7 +41,7 @@ import {
   ValidationError, isPathSafe, csvSafe, auditLog,
   initSecurity, shutdownSecurity, canAcceptSSE, incrementSSE,
   decrementSSE, getSSECount, isURLLengthValid, validateTokenCounts,
-  validateAuth, isAuthRequired, getAuthToken,
+  validateAuth, isAuthRequired, getAuthToken, redactProjectName,
 } from './security.js';
 import {
   loadBudgetConfig, saveBudgetConfig, getBudgetConfig,
@@ -61,7 +61,7 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3777;
 const HOST = process.env.WASTED_TOKEN_HOST || '127.0.0.1';
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const VALID_PERIODS = new Set(['today', 'week', '30days', 'month', 'all']);
 
 // ─── MIME Types ────────────────────────────────────────────────────────────────
@@ -160,6 +160,12 @@ async function handleAPI(req, res) {
 
     if (path === '/api/summary') {
       const summary = await getAggregateSummary(params.period, params.provider);
+      if (params.redact && summary.projects) {
+        summary.projects = summary.projects.map(p => ({
+          ...p,
+          project: redactProjectName(p.project),
+        }));
+      }
       return json(res, summary);
     }
 
@@ -167,7 +173,7 @@ async function handleAPI(req, res) {
       const { range } = getDateRange(params.period);
       const projects = await parseAllSessions(range, params.provider);
       return json(res, projects.map(p => ({
-        project: p.project,
+        project: params.redact ? redactProjectName(p.project) : p.project,
         provider: p.provider,
         providerDisplayName: p.providerDisplayName,
         costUSD: p.totalCostUSD,
@@ -343,8 +349,13 @@ async function handleAPI(req, res) {
         totalTokens,
         totalCostUSD: summary.totalCostUSD,
         rank,
-        topModels: summary.models.sort((a,b) => b.tokens - a.tokens).slice(0, 3)
+        topModels: summary.models.sort((a,b) => (b.inputTokens + b.outputTokens) - (a.inputTokens + a.outputTokens)).slice(0, 3)
       });
+    }
+
+    if (path === '/api/billing-window') {
+      const { getBillingWindow } = await import('./billing-window.js');
+      return json(res, await getBillingWindow());
     }
 
     // ─── Export API (CSV + JSON) with CSV injection protection ────────

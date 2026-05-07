@@ -1,10 +1,10 @@
 /**
  * Universal Provider Registry
- * 
+ *
  * Central registry for ALL supported AI coding IDEs and tools.
- * 
+ *
  * Supported providers:
- *   - Antigravity (Google DeepMind) ← What we're using right now!
+ *   - Antigravity (Google DeepMind) — What we're using right now!
  *   - Claude Code (Anthropic CLI)
  *   - Codex (OpenAI CLI)
  *   - Cursor IDE
@@ -13,7 +13,11 @@
  *   - Continue.dev
  *   - GitHub Copilot
  *   - Aider
- * 
+ *   - Gemini CLI (@google/gemini-cli)
+ *   - Amp (formerly Codegen)
+ *   - Roo Code (Roo-Cline VS Code extension)
+ *   - Zed Editor
+ *
  * To add a new provider:
  *   1. Create providers/yourprovider.js implementing the Provider interface
  *   2. Import and add it to the providers array below
@@ -28,6 +32,10 @@ import { cline } from './cline.js';
 import { continuedev } from './continuedev.js';
 import { copilot } from './copilot.js';
 import { aider } from './aider.js';
+import { geminiCli } from './geminicli.js';
+import { amp } from './amp.js';
+import { rooCode } from './roocode.js';
+import { zed } from './zed.js';
 import { extendedProviders } from './extended.js';
 import { sqliteProviders } from './sqlite_providers.js';
 
@@ -42,8 +50,12 @@ export const providers = [
   copilot,      // GitHub Copilot
   continuedev,  // Continue.dev
   aider,        // Aider CLI
-  ...sqliteProviders, // OpenCode, Hermes, etc (SQLite heuristics)
-  ...extendedProviders, // Gemini, Pi, Droid, Qwen, etc (JSON long-tail)
+  geminiCli,    // Google Gemini CLI (@google/gemini-cli)
+  amp,          // Amp (formerly Codegen)
+  rooCode,      // Roo Code (Roo-Cline VS Code extension)
+  zed,          // Zed Editor
+  ...sqliteProviders,   // OpenCode, Hermes, etc (SQLite heuristics)
+  ...extendedProviders, // Factory Droid, Pi, Kimi, Qwen, Kilo, Mux, Crush (JSON long-tail)
 ];
 
 /**

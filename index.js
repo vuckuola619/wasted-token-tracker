@@ -13,7 +13,7 @@
  */
 
 // ─── Core Exports ──────────────────────────────────────────────────────────────
-export { loadPricing, getModelCost, calculateCallCost, getShortModelName } from './models.js';
+export { loadPricing, getModelCosts, calculateCost, getShortModelName } from './models.js';
 export { parseAllSessions, getAggregateSummary, getDateRange, invalidateCache } from './parser.js';
 export { getActiveProviders, getProviderNames, discoverAllSessions } from './providers/index.js';
 
@@ -95,5 +95,5 @@ export async function exportData(period = 'week', provider = 'all') {
 /**
  * Package metadata.
  */
-export const VERSION = '1.3.0';
+export const VERSION = '1.4.0';
 export const NAME = 'wasted-token-tracker';

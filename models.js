@@ -252,7 +252,7 @@ async function fetchAndCachePricing() {
   const pricing = new Map();
 
   for (const [name, entry] of Object.entries(data)) {
-    if (name.includes('/') || name.includes('.')) continue;
+    if (name.includes('/')) continue; // skip provider-prefixed entries like "openai/gpt-4o"
     const costs = parseLiteLLMEntry(entry);
     if (costs) {
       // Integrity check 4: Validate reasonable value ranges

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 320px; height: 250px;
+      background: transparent;
+      overflow: hidden;
+      font-family: 'Consolas', 'Cascadia Code', monospace;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* ── strip (bottom, always visible) ── */
+    #strip {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 40px;
+      background: rgba(14, 14, 22, 0.93);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 10px 10px 6px 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      cursor: pointer;
+      -webkit-app-region: drag;
+      backdrop-filter: blur(12px);
+      transition: border-color 0.15s;
+    }
+    #strip:hover { border-color: rgba(255,255,255,0.22); }
+
+    .si { font-size: 12px; white-space: nowrap; -webkit-app-region: no-drag; }
+    .cost  { color: #f0c040; font-weight: 700; }
+    .inp   { color: #4fc3f7; }
+    .out   { color: #81c784; }
+    .win   { color: #ce93d8; font-size: 11px; }
+    .sep   { color: rgba(255,255,255,0.2); font-size: 10px; }
+
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      -webkit-app-region: no-drag;
+      transition: background 0.3s;
+    }
+    .on  { background: #4caf50; box-shadow: 0 0 6px #4caf5088; animation: blink 2s ease-in-out infinite; }
+    .loading { background: #f0c040; animation: blink 0.7s ease-in-out infinite; }
+    .off { background: rgba(255,255,255,0.2); }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* ── detail panel (above strip) ── */
+    #panel {
+      position: fixed;
+      bottom: 44px; left: 0; right: 0;
+      height: 202px;
+      background: rgba(14, 14, 22, 0.96);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 10px;
+      padding: 12px 14px 10px;
+      backdrop-filter: blur(16px);
+      display: none;
+      flex-direction: column;
+    }
+    #panel.open { display: flex; }
+
+    .hd {
+      font-size: 10px;
+      color: rgba(255,255,255,0.35);
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .hd span { color: rgba(255,255,255,0.5); background: rgba(255,255,255,0.07); padding: 1px 6px; border-radius: 4px; font-size: 9px; }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .row:last-of-type { border: none; }
+    .lbl { font-size: 11px; color: rgba(255,255,255,0.4); }
+    .val { font-size: 12px; color: #e0e0e0; font-weight: 500; }
+    .v-cost { color: #f0c040; }
+    .v-in   { color: #4fc3f7; }
+    .v-out  { color: #81c784; }
+    .v-win  { color: #ce93d8; }
+
+    .updated { margin-top: auto; font-size: 10px; color: rgba(255,255,255,0.2); text-align: right; padding-top: 6px; }
+  </style>
+</head>
+<body>
+
+<div id="panel">
+  <div class="hd">⚡ Wasted Token Tracker <span id="p-period">TODAY</span></div>
+  <div class="row"><span class="lbl">Total Cost</span>    <span class="val v-cost" id="p-cost">—</span></div>
+  <div class="row"><span class="lbl">Input Tokens</span>  <span class="val v-in"   id="p-in">—</span></div>
+  <div class="row"><span class="lbl">Output Tokens</span> <span class="val v-out"  id="p-out">—</span></div>
+  <div class="row"><span class="lbl">API Calls</span>     <span class="val"        id="p-calls">—</span></div>
+  <div class="row"><span class="lbl">Claude Window</span> <span class="val v-win"  id="p-win">—</span></div>
+  <div class="row"><span class="lbl">Providers</span>     <span class="val"        id="p-prov">—</span></div>
+  <div class="updated" id="p-ts">—</div>
+</div>
+
+<div id="strip">
+  <div class="dot loading" id="dot"></div>
+  <span class="si cost" id="s-cost">$—</span>
+  <span class="si sep">·</span>
+  <span class="si inp"  id="s-in">—↑</span>
+  <span class="si out"  id="s-out">—↓</span>
+  <span class="si sep">·</span>
+  <span class="si win"  id="s-win">—</span>
+</div>
+
+<script>
+'use strict';
+const API = 'http://127.0.0.1:3777';
+let open = false;
+
+const fmt = {
+  tok(n) {
+    if (!n) return '0';
+    if (n < 1e3) return String(n);
+    if (n < 1e6) return (n/1e3).toFixed(1)+'K';
+    return (n/1e6).toFixed(2)+'M';
+  },
+  cost(v) {
+    if (!v) return '$0.00';
+    if (v < 0.01) return '$'+v.toFixed(4);
+    if (v < 1)    return '$'+v.toFixed(3);
+    return '$'+v.toFixed(2);
+  },
+};
+
+async function refresh() {
+  const dot = document.getElementById('dot');
+  dot.className = 'dot loading';
+  try {
+    const [s, w] = await Promise.all([
+      fetch(`${API}/api/summary?period=today`).then(r => r.json()),
+      fetch(`${API}/api/billing-window`).then(r => r.json()).catch(() => null),
+    ]);
+
+    // strip
+    document.getElementById('s-cost').textContent = fmt.cost(s.totalCostUSD);
+    document.getElementById('s-in').textContent   = fmt.tok(s.totalInputTokens)+'↑';
+    document.getElementById('s-out').textContent  = fmt.tok(s.totalOutputTokens)+'↓';
+    document.getElementById('s-win').textContent  = w?.isActive ? '⏱'+w.resetInFormatted : (w ? 'expired' : '—');
+    dot.className = 'dot on';
+
+    // panel
+    document.getElementById('p-cost').textContent  = fmt.cost(s.totalCostUSD);
+    document.getElementById('p-in').textContent    = fmt.tok(s.totalInputTokens);
+    document.getElementById('p-out').textContent   = fmt.tok(s.totalOutputTokens);
+    document.getElementById('p-calls').textContent = (s.totalApiCalls||0).toLocaleString();
+    document.getElementById('p-win').textContent   = w?.isActive
+      ? `resets in ${w.resetInFormatted} · ${fmt.tok(w.tokensUsed)} tok`
+      : w ? 'expired' : 'no claude data';
+    document.getElementById('p-prov').textContent  = s.providers?.map(p=>p.displayName).join(', ')||'—';
+    document.getElementById('p-ts').textContent    = 'updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  } catch {
+    dot.className = 'dot off';
+    document.getElementById('s-cost').textContent = 'offline';
+    document.getElementById('s-win').textContent  = '↺';
+  }
+}
+
+document.getElementById('strip').addEventListener('click', () => {
+  open = !open;
+  document.getElementById('panel').classList.toggle('open', open);
+});
+
+refresh();
+setInterval(refresh, 30_000);
+</script>
+</body>
+</html>
